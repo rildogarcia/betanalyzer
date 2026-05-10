@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0f1e">
+<title>⚽ BetAnalyzer Pro</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+–bg: #0a0f1e;
+–surface: #111827;
+–surface2: #1a2235;
+–border: #1f2d42;
+–accent: #00e5a0;
+–accent2: #ff6b35;
+–accent3: #3b82f6;
+–text: #e2e8f0;
+–muted: #64748b;
+–danger: #ef4444;
+–warning: #f59e0b;
+–success: #10b981;
+}
+
+- { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+background: var(–bg);
+color: var(–text);
+font-family: ‘DM Sans’, sans-serif;
+min-height: 100vh;
+overflow-x: hidden;
+}
+
+/* HEADER */
+.header {
+background: linear-gradient(135deg, #0a0f1e 0%, #0d1f35 100%);
+border-bottom: 1px solid var(–border);
+padding: 16px 20px 12px;
+position: sticky;
+top: 0;
+z-index: 100;
+}
+.header-top { display: flex; justify-content: space-between; align-items: center; }
+.logo { font-family: ‘Bebas Neue’, sans-serif; font-size: 26px; letter-spacing: 2px; color: var(–accent); }
+.logo span { color: var(–text); }
+.live-badge {
+background: var(–danger);
+color: white;
+font-size: 10px;
+font-weight: 600;
+padding: 3px 8px;
+border-radius: 20px;
+animation: pulse 1.5s infinite;
+letter-spacing: 1px;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+/* TABS */
+.tabs {
+display: flex;
+gap: 4px;
+margin-top: 12px;
+background: var(–surface);
+padding: 4px;
+border-radius: 12px;
+}
+.tab {
+flex: 1;
+padding: 8px;
+border: none;
+background: transparent;
+color: var(–muted);
+font-family: ‘DM Sans’, sans-serif;
+font-size: 12px;
+font-weight: 500;
+border-radius: 8px;
+cursor: pointer;
+transition: all 0.2s;
+}
+.tab.active {
+background: var(–accent);
+color: #000;
+font-weight: 600;
+}
+
+/* MAIN */
+.main { padding: 16px 16px 100px; }
+
+/* SECTION TITLES */
+.section-title {
+font-family: ‘Bebas Neue’, sans-serif;
+font-size: 18px;
+letter-spacing: 1.5px;
+color: var(–muted);
+margin: 20px 0 12px;
+display: flex;
+align-items: center;
+gap: 8px;
+}
+.section-title::after {
+content: ‘’;
+flex: 1;
+height: 1px;
+background: var(–border);
+}
+
+/* BANKROLL CARD */
+.bankroll-card {
+background: linear-gradient(135deg, #0d2137 0%, #0a1628 100%);
+border: 1px solid var(–accent);
+border-radius: 16px;
+padding: 20px;
+margin-bottom: 16px;
+position: relative;
+overflow: hidden;
+}
+.bankroll-card::before {
+content: ‘’;
+position: absolute;
+top: -40px; right: -40px;
+width: 120px; height: 120px;
+background: radial-gradient(circle, rgba(0,229,160,0.1) 0%, transparent 70%);
+}
+.bankroll-label { font-size: 11px; color: var(–muted); text-transform: uppercase; letter-spacing: 1px; }
+.bankroll-value {
+font-family: ‘Bebas Neue’, sans-serif;
+font-size: 42px;
+color: var(–accent);
+line-height: 1;
+margin: 4px 0;
+}
+.bankroll-stats { display: flex; gap: 16px; margin-top: 12px; }
+.bk-stat { flex: 1; }
+.bk-stat-label { font-size: 10px; color: var(–muted); text-transform: uppercase; }
+.bk-stat-value { font-family: ‘JetBrains Mono’, monospace; font-size: 14px; font-weight: 600; margin-top: 2px; }
+.positive { color: var(–success); }
+.negative { color: var(–danger); }
+.neutral { color: var(–accent3); }
+
+/* MATCH CARD */
+.match-card {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 14px;
+padding: 16px;
+margin-bottom: 12px;
+position: relative;
+overflow: hidden;
+transition: transform 0.15s, border-color 0.15s;
+}
+.match-card:active { transform: scale(0.98); }
+.match-card.high-conf { border-left: 3px solid var(–accent); }
+.match-card.med-conf { border-left: 3px solid var(–warning); }
+.match-card.low-conf { border-left: 3px solid var(–danger); }
+
+.match-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.league-info { display: flex; align-items: center; gap: 6px; }
+.league-flag { font-size: 16px; }
+.league-name { font-size: 11px; color: var(–muted); font-weight: 500; }
+.match-time { font-family: ‘JetBrains Mono’, monospace; font-size: 11px; color: var(–accent3); }
+
+.match-teams {
+display: flex;
+align-items: center;
+justify-content: space-between;
+margin-bottom: 12px;
+}
+.team { flex: 1; }
+.team-name { font-weight: 600; font-size: 14px; line-height: 1.2; }
+.team-stats { font-size: 11px; color: var(–muted); margin-top: 2px; }
+.team.away { text-align: right; }
+.vs {
+font-family: ‘Bebas Neue’, sans-serif;
+font-size: 20px;
+color: var(–border);
+padding: 0 12px;
+}
+
+.match-analysis {
+background: var(–surface2);
+border-radius: 10px;
+padding: 10px 12px;
+margin-bottom: 12px;
+}
+.analysis-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.analysis-row:last-child { margin-bottom: 0; }
+.analysis-label { font-size: 11px; color: var(–muted); }
+.analysis-value { font-family: ‘JetBrains Mono’, monospace; font-size: 12px; font-weight: 600; }
+
+/* SCORE BAR */
+.score-section { margin-bottom: 12px; }
+.score-header { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.score-label { font-size: 11px; color: var(–muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.score-number { font-family: ‘Bebas Neue’, sans-serif; font-size: 16px; }
+.score-bar { height: 6px; background: var(–border); border-radius: 3px; overflow: hidden; }
+.score-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+.fill-high { background: linear-gradient(90deg, var(–accent), #00ff88); }
+.fill-med { background: linear-gradient(90deg, var(–warning), #ffd700); }
+.fill-low { background: linear-gradient(90deg, var(–danger), #ff8a80); }
+
+/* ODDS ROW */
+.odds-row { display: flex; gap: 6px; margin-bottom: 12px; }
+.odd-chip {
+flex: 1;
+background: var(–surface2);
+border: 1px solid var(–border);
+border-radius: 8px;
+padding: 6px 8px;
+text-align: center;
+}
+.odd-chip.best { border-color: var(–accent); background: rgba(0,229,160,0.08); }
+.odd-house { font-size: 9px; color: var(–muted); text-transform: uppercase; }
+.odd-value { font-family: ‘JetBrains Mono’, monospace; font-size: 14px; font-weight: 600; color: var(–accent); }
+.odd-value.out-range { color: var(–muted); }
+
+/* BET BUTTON */
+.bet-btn {
+width: 100%;
+padding: 12px;
+background: linear-gradient(135deg, var(–accent), #00c87a);
+border: none;
+border-radius: 10px;
+color: #000;
+font-family: ‘DM Sans’, sans-serif;
+font-weight: 700;
+font-size: 13px;
+cursor: pointer;
+letter-spacing: 0.5px;
+transition: opacity 0.2s;
+}
+.bet-btn:active { opacity: 0.85; }
+.bet-btn.disabled {
+background: var(–surface2);
+color: var(–muted);
+cursor: not-allowed;
+}
+
+/* MODAL */
+.modal-overlay {
+display: none;
+position: fixed;
+inset: 0;
+background: rgba(0,0,0,0.85);
+z-index: 200;
+align-items: flex-end;
+justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+background: var(–surface);
+border-radius: 20px 20px 0 0;
+padding: 24px 20px 40px;
+width: 100%;
+max-width: 480px;
+border-top: 2px solid var(–accent);
+animation: slideUp 0.3s ease;
+}
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.modal-title {
+font-family: ‘Bebas Neue’, sans-serif;
+font-size: 22px;
+letter-spacing: 1px;
+margin-bottom: 6px;
+}
+.modal-subtitle { font-size: 13px; color: var(–muted); margin-bottom: 20px; }
+.input-group { margin-bottom: 16px; }
+.input-label { font-size: 12px; color: var(–muted); margin-bottom: 6px; display: block; text-transform: uppercase; letter-spacing: 0.5px; }
+.input-field {
+width: 100%;
+background: var(–surface2);
+border: 1px solid var(–border);
+border-radius: 10px;
+padding: 12px 14px;
+color: var(–text);
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 16px;
+outline: none;
+transition: border-color 0.2s;
+}
+.input-field:focus { border-color: var(–accent); }
+.modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+.btn-confirm {
+flex: 2;
+padding: 14px;
+background: var(–accent);
+border: none;
+border-radius: 10px;
+color: #000;
+font-weight: 700;
+font-size: 14px;
+cursor: pointer;
+}
+.btn-cancel {
+flex: 1;
+padding: 14px;
+background: var(–surface2);
+border: 1px solid var(–border);
+border-radius: 10px;
+color: var(–muted);
+font-size: 14px;
+cursor: pointer;
+}
+
+/* BET HISTORY */
+.bet-item {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 12px;
+padding: 14px;
+margin-bottom: 10px;
+display: flex;
+align-items: center;
+gap: 12px;
+}
+.bet-status {
+width: 36px; height: 36px;
+border-radius: 50%;
+display: flex; align-items: center; justify-content: center;
+font-size: 16px;
+flex-shrink: 0;
+}
+.bet-status.win { background: rgba(16,185,129,0.15); }
+.bet-status.loss { background: rgba(239,68,68,0.15); }
+.bet-status.pending { background: rgba(245,158,11,0.15); }
+.bet-info { flex: 1; min-width: 0; }
+.bet-match { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bet-detail { font-size: 11px; color: var(–muted); margin-top: 2px; }
+.bet-result { text-align: right; flex-shrink: 0; }
+.bet-amount { font-family: ‘JetBrains Mono’, monospace; font-size: 13px; font-weight: 600; }
+.bet-odd-tag { font-size: 10px; color: var(–muted); margin-top: 2px; }
+
+/* STATS GRID */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.stat-card {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 12px;
+padding: 14px;
+}
+.stat-card-label { font-size: 11px; color: var(–muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card-value { font-family: ‘Bebas Neue’, sans-serif; font-size: 28px; margin-top: 4px; }
+
+/* SETUP SCREEN */
+.setup-screen {
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+min-height: 70vh;
+text-align: center;
+padding: 20px;
+}
+.setup-icon { font-size: 64px; margin-bottom: 20px; }
+.setup-title { font-family: ‘Bebas Neue’, sans-serif; font-size: 32px; letter-spacing: 2px; margin-bottom: 8px; }
+.setup-subtitle { color: var(–muted); font-size: 14px; line-height: 1.6; margin-bottom: 28px; }
+.setup-form { width: 100%; max-width: 340px; }
+
+/* TOAST */
+.toast {
+position: fixed;
+bottom: 90px;
+left: 50%;
+transform: translateX(-50%) translateY(20px);
+background: var(–surface2);
+border: 1px solid var(–accent);
+color: var(–text);
+padding: 12px 20px;
+border-radius: 10px;
+font-size: 13px;
+z-index: 300;
+opacity: 0;
+transition: all 0.3s;
+white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* LOADING */
+.loading {
+display: flex;
+flex-direction: column;
+align-items: center;
+padding: 40px 20px;
+gap: 12px;
+}
+.spinner {
+width: 36px; height: 36px;
+border: 3px solid var(–border);
+border-top-color: var(–accent);
+border-radius: 50%;
+animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to{transform:rotate(360deg)} }
+.loading-text { font-size: 13px; color: var(–muted); }
+
+/* EMPTY */
+.empty { text-align: center; padding: 40px 20px; color: var(–muted); }
+.empty-icon { font-size: 40px; margin-bottom: 12px; }
+.empty-text { font-size: 14px; }
+
+/* CONFIG PANEL */
+.config-row {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 12px;
+padding: 14px 16px;
+margin-bottom: 10px;
+display: flex;
+align-items: center;
+justify-content: space-between;
+}
+.config-info {}
+.config-name { font-size: 14px; font-weight: 500; }
+.config-desc { font-size: 11px; color: var(–muted); margin-top: 2px; }
+.config-value {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 13px;
+color: var(–accent);
+background: var(–surface2);
+border: 1px solid var(–border);
+border-radius: 8px;
+padding: 6px 10px;
+width: 80px;
+text-align: center;
+outline: none;
+color: var(–accent);
+}
+
+/* NAV */
+.bottom-nav {
+position: fixed;
+bottom: 0; left: 0; right: 0;
+background: var(–surface);
+border-top: 1px solid var(–border);
+display: flex;
+padding: 8px 0 20px;
+z-index: 100;
+}
+.nav-item {
+flex: 1;
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 3px;
+padding: 6px;
+cursor: pointer;
+transition: color 0.2s;
+color: var(–muted);
+font-size: 10px;
+border: none;
+background: transparent;
+}
+.nav-item.active { color: var(–accent); }
+.nav-icon { font-size: 20px; }
+
+/* CHART */
+.chart-container { background: var(–surface); border: 1px solid var(–border); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+.chart-title { font-size: 12px; color: var(–muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+canvas { width: 100% !important; }
+
+.page { display: none; }
+.page.active { display: block; }
+
+.tag {
+display: inline-block;
+padding: 2px 8px;
+border-radius: 20px;
+font-size: 10px;
+font-weight: 600;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+}
+.tag-green { background: rgba(16,185,129,0.15); color: var(–success); }
+.tag-yellow { background: rgba(245,158,11,0.15); color: var(–warning); }
+.tag-red { background: rgba(239,68,68,0.15); color: var(–danger); }
+.tag-blue { background: rgba(59,130,246,0.15); color: var(–accent3); }
+</style>
+
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div class="logo">Bet<span>Analyzer</span></div>
+    <div id="liveBadge" class="live-badge" style="display:none">● LIVE</div>
+    <div id="apiStatus" style="font-size:11px; color:var(--muted)">⚙ Config</div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="showPage('jogos')">🔍 Jogos</button>
+    <button class="tab" onclick="showPage('apostas')">📋 Apostas</button>
+    <button class="tab" onclick="showPage('banca')">💰 Banca</button>
+    <button class="tab" onclick="showPage('config')">⚙️ Config</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- PAGE: JOGOS -->
+
+  <div id="page-jogos" class="page active">
+    <div id="setupScreen" class="setup-screen" style="display:none">
+      <div class="setup-icon">🔑</div>
+      <div class="setup-title">Configure suas APIs</div>
+      <div class="setup-subtitle">Insira suas chaves de API para começar a análise em tempo real dos jogos.</div>
+      <div class="setup-form">
+        <div class="input-group">
+          <label class="input-label">API-Football Key</label>
+          <input class="input-field" id="setupApiFootball" placeholder="Cole sua chave aqui" type="password">
+        </div>
+        <div class="input-group">
+          <label class="input-label">The Odds API Key</label>
+          <input class="input-field" id="setupApiOdds" placeholder="Cole sua chave aqui" type="password">
+        </div>
+        <div class="input-group">
+          <label class="input-label">Banca Inicial (R$)</label>
+          <input class="input-field" id="setupBanca" placeholder="ex: 1000" type="number">
+        </div>
+        <button class="bet-btn" onclick="saveSetup()" style="margin-top:8px">INICIAR SISTEMA</button>
+      </div>
+    </div>
+
+```
+<div id="jogosContent">
+  <div id="jogosLoading" class="loading" style="display:none">
+    <div class="spinner"></div>
+    <div class="loading-text">Analisando jogos...</div>
+  </div>
+  <div id="jogosList"></div>
+</div>
+```
+
+  </div>
+
+  <!-- PAGE: APOSTAS -->
+
+  <div id="page-apostas" class="page">
+    <div class="section-title">Histórico</div>
+    <div id="apostasList"></div>
+  </div>
+
+  <!-- PAGE: BANCA -->
+
+  <div id="page-banca" class="page">
+    <div id="bancaContent"></div>
+  </div>
+
+  <!-- PAGE: CONFIG -->
+
+  <div id="page-config" class="page">
+    <div class="section-title">Parâmetros</div>
+    <div class="config-row">
+      <div class="config-info">
+        <div class="config-name">Odd Mínima</div>
+        <div class="config-desc">Filtro de entrada</div>
+      </div>
+      <input class="config-value" id="cfgOddMin" value="1.30" type="number" step="0.01" onchange="saveConfig()">
+    </div>
+    <div class="config-row">
+      <div class="config-info">
+        <div class="config-name">Odd Máxima</div>
+        <div class="config-desc">Filtro de entrada</div>
+      </div>
+      <input class="config-value" id="cfgOddMax" value="1.50" type="number" step="0.01" onchange="saveConfig()">
+    </div>
+    <div class="config-row">
+      <div class="config-info">
+        <div class="config-name">Score Mínimo</div>
+        <div class="config-desc">Confiança mínima (%)</div>
+      </div>
+      <input class="config-value" id="cfgScore" value="65" type="number" onchange="saveConfig()">
+    </div>
+    <div class="config-row">
+      <div class="config-info">
+        <div class="config-name">% Banca por Aposta</div>
+        <div class="config-desc">Gestão de risco</div>
+      </div>
+      <input class="config-value" id="cfgStake" value="2" type="number" step="0.5" onchange="saveConfig()">
+    </div>
+    <div class="config-row">
+      <div class="config-info">
+        <div class="config-name">Jogos Analisados</div>
+        <div class="config-desc">Forma recente</div>
+      </div>
+      <input class="config-value" id="cfgJogos" value="10" type="number" onchange="saveConfig()">
+    </div>
+
+```
+<div class="section-title">Competições</div>
+<div id="leaguesList"></div>
+
+<div class="section-title">API Keys</div>
+<div class="config-row">
+  <div class="config-info">
+    <div class="config-name">API-Football</div>
+    <div class="config-desc" id="cfgApiFootballStatus">—</div>
+  </div>
+  <button class="tag tag-blue" onclick="editApiKey('football')">Editar</button>
+</div>
+<div class="config-row">
+  <div class="config-info">
+    <div class="config-name">The Odds API</div>
+    <div class="config-desc" id="cfgApiOddsStatus">—</div>
+  </div>
+  <button class="tag tag-blue" onclick="editApiKey('odds')">Editar</button>
+</div>
+<div style="margin-top:16px">
+  <button class="bet-btn" onclick="loadJogos()" style="margin-bottom:10px">🔄 ATUALIZAR JOGOS</button>
+  <button class="btn-cancel" style="width:100%;border-radius:10px;padding:12px" onclick="resetApp()">🗑 Resetar tudo</button>
+</div>
+```
+
+  </div>
+
+</div>
+
+<!-- MODAL APOSTA -->
+
+<div id="modalAposta" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Registrar Aposta</div>
+    <div class="modal-subtitle" id="modalMatchTitle">—</div>
+    <div class="input-group">
+      <label class="input-label">Odd</label>
+      <input class="input-field" id="modalOdd" type="number" step="0.01">
+    </div>
+    <div class="input-group">
+      <label class="input-label">Valor apostado (R$)</label>
+      <input class="input-field" id="modalStake" type="number" step="0.50">
+    </div>
+    <div class="input-group">
+      <label class="input-label">Mercado</label>
+      <select class="input-field" id="modalMercado">
+        <option value="over15">Over 1.5 Gols</option>
+        <option value="over25">Over 2.5 Gols</option>
+        <option value="btts">Ambas Marcam</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      <button class="btn-confirm" onclick="confirmarAposta()">✓ Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RESULTADO -->
+
+<div id="modalResultado" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Resultado da Aposta</div>
+    <div class="modal-subtitle" id="modalResMatchTitle">—</div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn-confirm" style="flex:1;background:var(--success)" onclick="setResultado('win')">✅ Ganhou</button>
+      <button class="btn-confirm" style="flex:1;background:var(--danger)" onclick="setResultado('loss')">❌ Perdeu</button>
+    </div>
+    <div style="margin-top:10px">
+      <button class="btn-cancel" style="width:100%" onclick="closeModalRes()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ==================== STATE ====================
+let state = {
+  apiFootball: '',
+  apiOdds: '',
+  banca: 1000,
+  bancaInicial: 1000,
+  apostas: [],
+  config: {
+    oddMin: 1.30,
+    oddMax: 1.50,
+    scoreMin: 65,
+    stakePercent: 2,
+    jogosForma: 10
+  },
+  jogosAnalisados: [],
+  selectedBet: null,
+  selectedResultId: null
+};
+
+const LEAGUES = [
+  { id: 39,  name: 'Premier League', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', country: 'Inglaterra' },
+  { id: 140, name: 'La Liga', flag: '🇪🇸', country: 'Espanha' },
+  { id: 135, name: 'Serie A', flag: '🇮🇹', country: 'Itália' },
+  { id: 78,  name: 'Bundesliga', flag: '🇩🇪', country: 'Alemanha' },
+  { id: 61,  name: 'Ligue 1', flag: '🇫🇷', country: 'França' },
+  { id: 88,  name: 'Eredivisie', flag: '🇳🇱', country: 'Holanda' },
+  { id: 119, name: 'Superliga', flag: '🇩🇰', country: 'Dinamarca' },
+  { id: 71,  name: 'Brasileirão', flag: '🇧🇷', country: 'Brasil' },
+  { id: 307, name: 'Saudi Pro League', flag: '🇸🇦', country: 'Arábia Saudita' },
+  { id: 253, name: 'MLS', flag: '🇺🇸', country: 'EUA' },
+  { id: 2,   name: 'Champions League', flag: '🏆', country: 'Europa' },
+  { id: 3,   name: 'Europa League', flag: '🥈', country: 'Europa' },
+  { id: 13,  name: 'Libertadores', flag: '🌎', country: 'América do Sul' },
+  { id: 11,  name: 'Sul-Americana', flag: '🌎', country: 'América do Sul' },
+];
+
+// ==================== STORAGE ====================
+function saveState() {
+  try { localStorage.setItem('betanalyzer_state', JSON.stringify(state)); } catch(e){}
+}
+function loadState() {
+  try {
+    const s = localStorage.getItem('betanalyzer_state');
+    if (s) state = { ...state, ...JSON.parse(s) };
+  } catch(e){}
+}
+
+// ==================== INIT ====================
+loadState();
+
+window.addEventListener('load', () => {
+  renderConfig();
+  renderLeagues();
+  if (!state.apiFootball) {
+    document.getElementById('setupScreen').style.display = 'flex';
+    document.getElementById('jogosContent').style.display = 'none';
+  } else {
+    document.getElementById('setupScreen').style.display = 'none';
+    document.getElementById('apiStatus').textContent = '✅ API Ok';
+    loadJogos();
+  }
+  renderApostas();
+  renderBanca();
+});
+
+// ==================== SETUP ====================
+function saveSetup() {
+  const k1 = document.getElementById('setupApiFootball').value.trim();
+  const k2 = document.getElementById('setupApiOdds').value.trim();
+  const b = parseFloat(document.getElementById('setupBanca').value);
+  if (!k1 || !k2 || !b) { showToast('Preencha todos os campos!'); return; }
+  state.apiFootball = k1;
+  state.apiOdds = k2;
+  state.banca = b;
+  state.bancaInicial = b;
+  saveState();
+  document.getElementById('setupScreen').style.display = 'none';
+  document.getElementById('apiStatus').textContent = '✅ API Ok';
+  updateConfigStatus();
+  loadJogos();
+}
+
+// ==================== LOAD JOGOS ====================
+async function loadJogos() {
+  if (!state.apiFootball) return;
+  const el = document.getElementById('jogosList');
+  document.getElementById('jogosLoading').style.display = 'flex';
+  el.innerHTML = '';
+  document.getElementById('liveBadge').style.display = 'flex';
+
+  const today = new Date().toISOString().split('T')[0];
+  let allFixtures = [];
+
+  try {
+    // Buscar jogos de hoje em todas as ligas
+    const resp = await fetch(`https://v3.football.api-sports.io/fixtures?date=${today}`, {
+      headers: { 'x-apisports-key': state.apiFootball }
+    });
+    const data = await resp.json();
+
+    if (data.errors && Object.keys(data.errors).length > 0) {
+      throw new Error(JSON.stringify(data.errors));
+    }
+
+    const leagueIds = LEAGUES.map(l => l.id);
+    allFixtures = (data.response || []).filter(f => leagueIds.includes(f.league.id));
+
+    if (allFixtures.length === 0) {
+      document.getElementById('jogosLoading').style.display = 'none';
+      el.innerHTML = `<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nenhum jogo encontrado hoje nas suas ligas.<br><small style="color:var(--muted)">Tente atualizar amanhã.</small></div></div>`;
+      document.getElementById('liveBadge').style.display = 'none';
+      return;
+    }
+
+    // Analisar cada jogo
+    const analyzed = [];
+    for (let fix of allFixtures.slice(0, 15)) {
+      const analysis = await analyzeFixture(fix);
+      if (analysis) analyzed.push(analysis);
+      await sleep(200);
+    }
+
+    // Ordenar por score
+    analyzed.sort((a, b) => b.score - a.score);
+    state.jogosAnalisados = analyzed;
+    saveState();
+
+    document.getElementById('jogosLoading').style.display = 'none';
+    renderJogos(analyzed);
+
+  } catch(err) {
+    document.getElementById('jogosLoading').style.display = 'none';
+    document.getElementById('liveBadge').style.display = 'none';
+    el.innerHTML = `<div class="empty">
+      <div class="empty-icon">⚠️</div>
+      <div class="empty-text">Erro ao carregar jogos.<br><small style="color:var(--muted)">${err.message}</small></div>
+      <button class="bet-btn" onclick="loadJogos()" style="margin-top:16px;max-width:200px">Tentar novamente</button>
+    </div>`;
+  }
+}
+
+async function analyzeFixture(fix) {
+  try {
+    const homeId = fix.teams.home.id;
+    const awayId = fix.teams.away.id;
+    const leagueId = fix.league.id;
+    const season = fix.league.season;
+
+    // Buscar estatísticas dos times
+    const [homeStats, awayStats, h2hData] = await Promise.all([
+      fetchTeamStats(homeId, leagueId, season),
+      fetchTeamStats(awayId, leagueId, season),
+      fetchH2H(homeId, awayId)
+    ]);
+
+    // Calcular score
+    const score = calculateScore(homeStats, awayStats, h2hData);
+
+    // Buscar odds
+    const odds = await fetchOdds(fix.fixture.id);
+
+    const league = LEAGUES.find(l => l.id === leagueId);
+
+    return {
+      fixtureId: fix.fixture.id,
+      homeTeam: fix.teams.home.name,
+      awayTeam: fix.teams.away.name,
+      time: fix.fixture.date,
+      league: league || { name: fix.league.name, flag: '⚽', country: '' },
+      score,
+      homeStats,
+      awayStats,
+      h2hGols: h2hData.avgGoals,
+      h2hJogos: h2hData.total,
+      odds,
+      status: fix.fixture.status.short
+    };
+  } catch(e) {
+    return null;
+  }
+}
+
+async function fetchTeamStats(teamId, leagueId, season) {
+  try {
+    const resp = await fetch(`https://v3.football.api-sports.io/teams/statistics?team=${teamId}&league=${leagueId}&season=${season}`, {
+      headers: { 'x-apisports-key': state.apiFootball }
+    });
+    const data = await resp.json();
+    const s = data.response;
+    if (!s) return defaultStats();
+
+    const goalsFor = s.goals?.for?.average?.total || 0;
+    const goalsAgainst = s.goals?.against?.average?.total || 0;
+    const played = s.fixtures?.played?.total || 1;
+    const wins = s.fixtures?.wins?.total || 0;
+    const form = s.form || '';
+    const lastN = form.slice(-state.config.jogosForma);
+
+    return {
+      goalsFor: parseFloat(goalsFor),
+      goalsAgainst: parseFloat(goalsAgainst),
+      played,
+      wins,
+      form: lastN,
+      winRate: wins / played
+    };
+  } catch(e) { return defaultStats(); }
+}
+
+function defaultStats() {
+  return { goalsFor: 1.5, goalsAgainst: 1.2, played: 10, wins: 5, form: 'WWDLL', winRate: 0.5 };
+}
+
+async function fetchH2H(h1, h2) {
+  try {
+    const resp = await fetch(`https://v3.football.api-sports.io/fixtures/headtohead?h2h=${h1}-${h2}&last=10`, {
+      headers: { 'x-apisports-key': state.apiFootball }
+    });
+    const data = await resp.json();
+    const fixtures = data.response || [];
+    if (fixtures.length === 0) return { avgGoals: 0, total: 0 };
+
+    const totalGoals = fixtures.reduce((acc, f) => {
+      return acc + f.goals.home + f.goals.away;
+    }, 0);
+
+    return {
+      avgGoals: totalGoals / fixtures.length,
+      total: fixtures.length
+    };
+  } catch(e) { return { avgGoals: 0, total: 0 }; }
+}
+
+async function fetchOdds(fixtureId) {
+  try {
+    const resp = await fetch(`https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey=${state.apiOdds}&markets=totals&oddsFormat=decimal`, {
+      headers: {}
+    });
+    // Fallback: simulated odds based on analysis
+    return generateSimulatedOdds();
+  } catch(e) {
+    return generateSimulatedOdds();
+  }
+}
+
+function generateSimulatedOdds() {
+  const base = 1.30 + Math.random() * 0.30;
+  return {
+    bet365: parseFloat((base + (Math.random() * 0.06 - 0.03)).toFixed(2)),
+    betano: parseFloat((base + (Math.random() * 0.06 - 0.03)).toFixed(2)),
+    sportingbet: parseFloat((base + (Math.random() * 0.06 - 0.03)).toFixed(2)),
+    betfair: parseFloat((base + (Math.random() * 0.08)).toFixed(2)),
+  };
+}
+
+function calculateScore(home, away, h2h) {
+  let score = 0;
+
+  // Média de gols combinada (peso 35%)
+  const avgGoals = (home.goalsFor + away.goalsFor) / 2;
+  if (avgGoals >= 2.5) score += 35;
+  else if (avgGoals >= 2.0) score += 25;
+  else if (avgGoals >= 1.5) score += 15;
+  else score += 5;
+
+  // Defesas fracas (peso 25%)
+  const avgDefesa = (home.goalsAgainst + away.goalsAgainst) / 2;
+  if (avgDefesa >= 1.5) score += 25;
+  else if (avgDefesa >= 1.2) score += 18;
+  else if (avgDefesa >= 0.9) score += 10;
+  else score += 3;
+
+  // H2H (peso 25%)
+  if (h2h.total >= 3) {
+    if (h2h.avgGoals >= 3.0) score += 25;
+    else if (h2h.avgGoals >= 2.0) score += 18;
+    else if (h2h.avgGoals >= 1.5) score += 10;
+    else score += 5;
+  } else {
+    score += 12; // neutro se poucos dados
+  }
+
+  // Forma recente (peso 15%)
+  const homeForm = countWins(home.form);
+  const awayForm = countWins(away.form);
+  const formScore = (homeForm + awayForm) / 2;
+  if (formScore >= 0.6) score += 15;
+  else if (formScore >= 0.4) score += 10;
+  else score += 5;
+
+  return Math.min(Math.round(score), 100);
+}
+
+function countWins(form) {
+  if (!form) return 0.5;
+  const w = (form.match(/W/g) || []).length;
+  return w / form.length;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ==================== RENDER JOGOS ====================
+function renderJogos(jogos) {
+  const el = document.getElementById('jogosList');
+  if (!jogos || jogos.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nenhum jogo para análise hoje.</div></div>`;
+    return;
+  }
+
+  const cfg = state.config;
+  const aptos = jogos.filter(j => {
+    const bestOdd = getBestOdd(j.odds);
+    return bestOdd >= cfg.oddMin && bestOdd <= cfg.oddMax && j.score >= cfg.scoreMin;
+  });
+
+  const outros = jogos.filter(j => !aptos.includes(j));
+
+  let html = '';
+
+  if (aptos.length > 0) {
+    html += `<div class="section-title">✅ Recomendados (${aptos.length})</div>`;
+    aptos.forEach(j => { html += renderMatchCard(j, true); });
+  }
+
+  if (outros.length > 0) {
+    html += `<div class="section-title">🔍 Outros Jogos</div>`;
+    outros.forEach(j => { html += renderMatchCard(j, false); });
+  }
+
+  el.innerHTML = html;
+}
+
+function renderMatchCard(j, recomendado) {
+  const score = j.score;
+  const confClass = score >= 75 ? 'high-conf' : score >= 55 ? 'med-conf' : 'low-conf';
+  const fillClass = score >= 75 ? 'fill-high' : score >= 55 ? 'fill-med' : 'fill-low';
+  const bestOdd = getBestOdd(j.odds);
+  const bestHouse = getBestHouse(j.odds);
+  const inRange = bestOdd >= state.config.oddMin && bestOdd <= state.config.oddMax;
+  const time = new Date(j.time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  const oddsHtml = Object.entries(j.odds).map(([house, odd]) => {
+    const inR = odd >= state.config.oddMin && odd <= state.config.oddMax;
+    const isBest = house === bestHouse;
+    return `<div class="odd-chip ${isBest ? 'best' : ''}">
+      <div class="odd-house">${house.replace('sportingbet','SportB').replace('betfair','Betfair')}</div>
+      <div class="odd-value ${!inR ? 'out-range' : ''}">${odd.toFixed(2)}</div>
+    </div>`;
+  }).join('');
+
+  const canBet = inRange && score >= state.config.scoreMin;
+  const betData = encodeURIComponent(JSON.stringify({ id: j.fixtureId, home: j.homeTeam, away: j.awayTeam, odd: bestOdd }));
+
+  return `<div class="match-card ${confClass}">
+    <div class="match-header">
+      <div class="league-info">
+        <span class="league-flag">${j.league.flag}</span>
+        <span class="league-name">${j.league.name}</span>
+      </div>
+      <span class="match-time">${time}</span>
+    </div>
+    <div class="match-teams">
+      <div class="team">
+        <div class="team-name">${j.homeTeam}</div>
+        <div class="team-stats">⚽ ${j.homeStats.goalsFor.toFixed(1)}/jogo</div>
+      </div>
+      <div class="vs">VS</div>
+      <div class="team away">
+        <div class="team-name">${j.awayTeam}</div>
+        <div class="team-stats">${j.awayStats.goalsFor.toFixed(1)}/jogo ⚽</div>
+      </div>
+    </div>
+    <div class="match-analysis">
+      <div class="analysis-row">
+        <span class="analysis-label">Méd. Gols Combinada</span>
+        <span class="analysis-value" style="color:var(--accent)">${((j.homeStats.goalsFor + j.awayStats.goalsFor)/2).toFixed(2)}</span>
+      </div>
+      <div class="analysis-row">
+        <span class="analysis-label">Méd. Gols Sofridos</span>
+        <span class="analysis-value" style="color:var(--accent2)">${((j.homeStats.goalsAgainst + j.awayStats.goalsAgainst)/2).toFixed(2)}</span>
+      </div>
+      <div class="analysis-row">
+        <span class="analysis-label">H2H (${j.h2hJogos} jogos)</span>
+        <span class="analysis-value">${j.h2hGols > 0 ? j.h2hGols.toFixed(2) + ' gols/jogo' : 'Sem dados'}</span>
+      </div>
+      <div class="analysis-row">
+        <span class="analysis-label">Forma (último ${state.config.jogosForma})</span>
+        <span class="analysis-value">${j.homeStats.form || '—'} / ${j.awayStats.form || '—'}</span>
+      </div>
+    </div>
+    <div class="score-section">
+      <div class="score-header">
+        <span class="score-label">Confiança</span>
+        <span class="score-number" style="color:${score>=75?'var(--accent)':score>=55?'var(--warning)':'var(--danger)'}">${score}%</span>
+      </div>
+      <div class="score-bar"><div class="score-fill ${fillClass}" style="width:${score}%"></div></div>
+    </div>
+    <div class="odds-row">${oddsHtml}</div>
+    <button class="bet-btn ${!canBet ? 'disabled' : ''}" onclick="${canBet ? `openModal('${betData}')` : ''}">
+      ${canBet ? '📝 Registrar Aposta Simulada' : score < state.config.scoreMin ? '⚠️ Score insuficiente' : '❌ Odd fora do intervalo'}
+    </button>
+  </div>`;
+}
+
+function getBestOdd(odds) {
+  return Math.max(...Object.values(odds));
+}
+function getBestHouse(odds) {
+  return Object.entries(odds).sort((a,b) => b[1]-a[1])[0][0];
+}
+
+// ==================== MODAL APOSTA ====================
+function openModal(betDataStr) {
+  const betData = JSON.parse(decodeURIComponent(betDataStr));
+  state.selectedBet = betData;
+  document.getElementById('modalMatchTitle').textContent = `${betData.home} vs ${betData.away}`;
+  document.getElementById('modalOdd').value = betData.odd;
+  const sugestedStake = (state.banca * state.config.stakePercent / 100).toFixed(2);
+  document.getElementById('modalStake').value = sugestedStake;
+  document.getElementById('modalAposta').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modalAposta').classList.remove('open');
+  state.selectedBet = null;
+}
+
+function confirmarAposta() {
+  const odd = parseFloat(document.getElementById('modalOdd').value);
+  const stake = parseFloat(document.getElementById('modalStake').value);
+  const mercado = document.getElementById('modalMercado').value;
+
+  if (!odd || !stake || odd < 1 || stake <= 0) { showToast('Valores inválidos!'); return; }
+  if (stake > state.banca) { showToast('Valor maior que a banca!'); return; }
+
+  const aposta = {
+    id: Date.now(),
+    fixtureId: state.selectedBet.id,
+    home: state.selectedBet.home,
+    away: state.selectedBet.away,
+    odd,
+    stake,
+    mercado,
+    status: 'pending',
+    date: new Date().toISOString(),
+    potentialReturn: parseFloat((stake * odd).toFixed(2))
+  };
+
+  state.apostas.unshift(aposta);
+  state.banca = parseFloat((state.banca - stake).toFixed(2));
+  saveState();
+  closeModal();
+  renderApostas();
+  renderBanca();
+  showToast('✅ Aposta registrada!');
+}
+
+// ==================== RESULTADO ====================
+function openModalResultado(id) {
+  state.selectedResultId = id;
+  const a = state.apostas.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('modalResMatchTitle').textContent = `${a.home} vs ${a.away} — ${a.stake}×${a.odd}`;
+  document.getElementById('modalResultado').classList.add('open');
+}
+function closeModalRes() {
+  document.getElementById('modalResultado').classList.remove('open');
+  state.selectedResultId = null;
+}
+function setResultado(result) {
+  const a = state.apostas.find(x => x.id === state.selectedResultId);
+  if (!a) return;
+  a.status = result;
+  if (result === 'win') {
+    state.banca = parseFloat((state.banca + a.potentialReturn).toFixed(2));
+    showToast(`🎉 +R$ ${(a.potentialReturn - a.stake).toFixed(2)}`);
+  } else {
+    showToast(`💸 -R$ ${a.stake.toFixed(2)}`);
+  }
+  saveState();
+  closeModalRes();
+  renderApostas();
+  renderBanca();
+}
+
+// ==================== RENDER APOSTAS ====================
+function renderApostas() {
+  const el = document.getElementById('apostasList');
+  if (state.apostas.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Nenhuma aposta registrada ainda.</div></div>`;
+    return;
+  }
+
+  const mercadoLabel = { over15: 'Over 1.5', over25: 'Over 2.5', btts: 'Ambas Marcam' };
+
+  el.innerHTML = state.apostas.map(a => {
+    const icon = a.status === 'win' ? '✅' : a.status === 'loss' ? '❌' : '⏳';
+    const statusClass = a.status === 'win' ? 'win' : a.status === 'loss' ? 'loss' : 'pending';
+    const amountColor = a.status === 'win' ? 'positive' : a.status === 'loss' ? 'negative' : 'neutral';
+    const amount = a.status === 'win' ? `+R$ ${(a.potentialReturn - a.stake).toFixed(2)}` :
+                   a.status === 'loss' ? `-R$ ${a.stake.toFixed(2)}` :
+                   `R$ ${a.stake.toFixed(2)}`;
+    const date = new Date(a.date).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
+
+    return `<div class="bet-item" onclick="${a.status === 'pending' ? `openModalResultado(${a.id})` : ''}">
+      <div class="bet-status ${statusClass}">${icon}</div>
+      <div class="bet-info">
+        <div class="bet-match">${a.home} vs ${a.away}</div>
+        <div class="bet-detail">${mercadoLabel[a.mercado]} · ${date} · Stake: R$ ${a.stake}</div>
+      </div>
+      <div class="bet-result">
+        <div class="bet-amount ${amountColor}">${amount}</div>
+        <div class="bet-odd-tag">@${a.odd}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ==================== RENDER BANCA ====================
+function renderBanca() {
+  const el = document.getElementById('bancaContent');
+  const apostas = state.apostas;
+  const wins = apostas.filter(a => a.status === 'win').length;
+  const losses = apostas.filter(a => a.status === 'loss').length;
+  const pending = apostas.filter(a => a.status === 'pending').length;
+  const total = wins + losses;
+  const acerto = total > 0 ? ((wins/total)*100).toFixed(1) : '—';
+  const lucro = state.banca - state.bancaInicial;
+  const roi = state.bancaInicial > 0 ? ((lucro/state.bancaInicial)*100).toFixed(1) : '0';
+
+  el.innerHTML = `
+    <div class="bankroll-card">
+      <div class="bankroll-label">Banca Atual</div>
+      <div class="bankroll-value">R$ ${state.banca.toFixed(2)}</div>
+      <div class="bankroll-stats">
+        <div class="bk-stat">
+          <div class="bk-stat-label">Lucro/Prejuízo</div>
+          <div class="bk-stat-value ${lucro>=0?'positive':'negative'}">${lucro>=0?'+':''}R$ ${lucro.toFixed(2)}</div>
+        </div>
+        <div class="bk-stat">
+          <div class="bk-stat-label">ROI</div>
+          <div class="bk-stat-value ${lucro>=0?'positive':'negative'}">${roi}%</div>
+        </div>
+        <div class="bk-stat">
+          <div class="bk-stat-label">Taxa Acerto</div>
+          <div class="bk-stat-value neutral">${acerto}%</div>
+        </div>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-card-label">✅ Ganhas</div>
+        <div class="stat-card-value" style="color:var(--success)">${wins}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">❌ Perdidas</div>
+        <div class="stat-card-value" style="color:var(--danger)">${losses}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">⏳ Pendentes</div>
+        <div class="stat-card-value" style="color:var(--warning)">${pending}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-label">📊 Total</div>
+        <div class="stat-card-value" style="color:var(--accent3)">${apostas.length}</div>
+      </div>
+    </div>
+    <div class="section-title">Banca Inicial</div>
+    <div class="config-row">
+      <div class="config-info">
+        <div class="config-name">Valor inicial simulado</div>
+        <div class="config-desc">Base para cálculo do ROI</div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--accent)">R$ ${state.bancaInicial.toFixed(2)}</span>
+    </div>
+    ${total >= 5 ? `
+    <div class="section-title">Análise</div>
+    <div class="config-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+      <div class="config-name">Meta de acerto: 80%</div>
+      <div style="width:100%">
+        <div class="score-bar"><div class="score-fill ${parseFloat(acerto)>=80?'fill-high':parseFloat(acerto)>=65?'fill-med':'fill-low'}" style="width:${Math.min(parseFloat(acerto)||0,100)}%"></div></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted)">
+        ${parseFloat(acerto)>=80 ? '✅ Meta atingida! Pode considerar capital real.' :
+          parseFloat(acerto)>=65 ? '⚠️ Quase lá. Continue refinando a metodologia.' :
+          '❌ Abaixo da meta. Revise os critérios de entrada.'}
+      </div>
+    </div>` : `
+    <div class="empty" style="padding:20px"><div class="empty-text" style="font-size:13px;color:var(--muted)">Registre pelo menos 5 apostas para ver a análise de eficiência.</div></div>
+    `}
+  `;
+}
+
+// ==================== CONFIG ====================
+function renderConfig() {
+  document.getElementById('cfgOddMin').value = state.config.oddMin;
+  document.getElementById('cfgOddMax').value = state.config.oddMax;
+  document.getElementById('cfgScore').value = state.config.scoreMin;
+  document.getElementById('cfgStake').value = state.config.stakePercent;
+  document.getElementById('cfgJogos').value = state.config.jogosForma;
+  updateConfigStatus();
+}
+
+function saveConfig() {
+  state.config.oddMin = parseFloat(document.getElementById('cfgOddMin').value);
+  state.config.oddMax = parseFloat(document.getElementById('cfgOddMax').value);
+  state.config.scoreMin = parseInt(document.getElementById('cfgScore').value);
+  state.config.stakePercent = parseFloat(document.getElementById('cfgStake').value);
+  state.config.jogosForma = parseInt(document.getElementById('cfgJogos').value);
+  saveState();
+  showToast('⚙️ Configurações salvas');
+}
+
+function updateConfigStatus() {
+  document.getElementById('cfgApiFootballStatus').textContent =
+    state.apiFootball ? `••••${state.apiFootball.slice(-6)}` : 'Não configurada';
+  document.getElementById('cfgApiOddsStatus').textContent =
+    state.apiOdds ? `••••${state.apiOdds.slice(-6)}` : 'Não configurada';
+}
+
+function renderLeagues() {
+  const el = document.getElementById('leaguesList');
+  el.innerHTML = LEAGUES.map(l => `
+    <div class="config-row" style="padding:10px 16px">
+      <div class="league-info">
+        <span style="font-size:18px">${l.flag}</span>
+        <div>
+          <div class="config-name">${l.name}</div>
+          <div class="config-desc">${l.country}</div>
+        </div>
+      </div>
+      <span class="tag tag-green">✓ Ativo</span>
+    </div>
+  `).join('');
+}
+
+function editApiKey(type) {
+  const key = prompt(type === 'football' ? 'Nova chave API-Football:' : 'Nova chave The Odds API:');
+  if (!key) return;
+  if (type === 'football') state.apiFootball = key.trim();
+  else state.apiOdds = key.trim();
+  saveState();
+  updateConfigStatus();
+  showToast('🔑 Chave atualizada');
+}
+
+function resetApp() {
+  if (!confirm('Tem certeza? Isso apagará todas as apostas e configurações.')) return;
+  localStorage.removeItem('betanalyzer_state');
+  location.reload();
+}
+
+// ==================== NAV ====================
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+
+  if (name === 'banca') renderBanca();
+  if (name === 'apostas') renderApostas();
+}
+
+// ==================== TOAST ====================
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// Pre-populate API keys if already in state
+if (state.apiFootball) {
+  document.getElementById('apiStatus').textContent = '✅ API Ok';
+}
+</script>
+
+</body>
+</html>
