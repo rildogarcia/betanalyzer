@@ -574,6 +574,7 @@ function salvarNoHistorico(analysis){
     time: analysis.time,
     score: analysis.score,
     betfairOdd: analysis.betfairOdd,
+    ev: calcEV(analysis.score, analysis.betfairOdd),
     goalsFor: (analysis.homeStats.goalsFor + analysis.awayStats.goalsFor) / 2,
     goalsAgainst: (analysis.homeStats.goalsAgainst + analysis.awayStats.goalsAgainst) / 2,
     h2hGols: analysis.h2hGols,
@@ -832,6 +833,28 @@ function countWins(form){
 }
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 
+// ===================== EV CALCULATION =====================
+function calcEV(score, odd){
+  // Probabilidade implícita do nosso modelo (score / 100)
+  const prob = score / 100;
+  // EV = (probabilidade × odd) - 1
+  return parseFloat(((prob * odd) - 1).toFixed(3));
+}
+
+function getEVClass(ev){
+  if(ev >= 0.20) return 'ev-excelente';
+  if(ev >= 0.10) return 'ev-bom';
+  if(ev >= 0)    return 'ev-positivo';
+  return 'ev-negativo';
+}
+
+function getEVLabel(ev){
+  if(ev >= 0.20) return '🔥 EV Excelente';
+  if(ev >= 0.10) return '✅ EV Bom';
+  if(ev >= 0)    return '✔ EV Positivo';
+  return '❌ EV Negativo';
+}
+
 // ===================== RENDER JOGOS =====================
 function renderJogos(jogos){
   const el=document.getElementById('jogosList');
@@ -840,17 +863,24 @@ function renderJogos(jogos){
     return;
   }
   const cfg=state.config;
-  const aptos=jogos.filter(j=>j.betfairOdd>=cfg.oddMin&&j.betfairOdd<=cfg.oddMax&&j.score>=cfg.scoreMin);
-  const outros=jogos.filter(j=>!aptos.includes(j));
+
+  // Recomendados: score mínimo atingido E EV positivo
+  const recomendados=jogos.filter(j=>{
+    const ev=calcEV(j.score, j.betfairOdd);
+    return j.score>=cfg.scoreMin && ev>=0;
+  }).sort((a,b)=>calcEV(b.score,b.betfairOdd)-calcEV(a.score,a.betfairOdd));
+
+  const outros=jogos.filter(j=>!recomendados.includes(j));
+
   let html='';
-  if(aptos.length>0){
-    html+=`<div class="section-title">✅ Recomendados (${aptos.length})</div>`;
-    aptos.forEach(j=>{ html+=renderMatchCard(j); });
+  if(recomendados.length>0){
+    html+=`<div class="section-title">✅ Recomendados (${recomendados.length})</div>`;
+    recomendados.forEach(j=>{ html+=renderMatchCard(j); });
   } else {
-    html+=`<div class="empty" style="padding:16px 0"><div class="empty-text" style="font-size:12px">Nenhum jogo atende todos os critérios.</div></div>`;
+    html+=`<div class="empty" style="padding:16px 0"><div class="empty-text" style="font-size:12px">Nenhum jogo com EV positivo hoje.</div></div>`;
   }
   if(outros.length>0){
-    html+=`<div class="section-title">🔍 Todos os Jogos (${outros.length})</div>`;
+    html+=`<div class="section-title">🔍 Outros Jogos (${outros.length})</div>`;
     outros.forEach(j=>{ html+=renderMatchCard(j); });
   }
   el.innerHTML=html;
@@ -858,14 +888,25 @@ function renderJogos(jogos){
 
 function renderMatchCard(j){
   const score=j.score;
+  const ev=calcEV(score, j.betfairOdd);
+  const evPositivo=ev>=0;
   const confClass=score>=75?'high-conf':score>=55?'med-conf':'low-conf';
   const fillClass=score>=75?'fill-high':score>=55?'fill-med':'fill-low';
-  const inRange=j.betfairOdd>=state.config.oddMin&&j.betfairOdd<=state.config.oddMax;
-  const canBet=inRange&&score>=state.config.scoreMin;
+  const canBet=score>=state.config.scoreMin && evPositivo;
   const time=new Date(j.time).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const betData=encodeURIComponent(JSON.stringify({id:j.fixtureId,home:j.homeTeam,away:j.awayTeam,odd:j.betfairOdd}));
   const cacheTag=j.fromCache?'<span class="cache-badge">💾</span>':'';
   const savedTag=`<span class="saved-badge">💾 salvo</span>`;
+
+  // Odd colorida: verde se acima do intervalo (value!), amarela se dentro, cinza se abaixo
+  const inRange=j.betfairOdd>=state.config.oddMin&&j.betfairOdd<=state.config.oddMax;
+  const aboveRange=j.betfairOdd>state.config.oddMax;
+  const oddColor=aboveRange?'var(--success)':inRange?'var(--betfair)':'var(--muted)';
+  const oddLabel=aboveRange?'⬆ Value!':inRange?'✓ Na faixa':'↓ Abaixo';
+
+  // EV display
+  const evColor=ev>=0.20?'var(--success)':ev>=0.10?'var(--accent)':ev>=0?'var(--warning)':'var(--danger)';
+  const evSign=ev>=0?'+':'';
 
   return `<div class="match-card ${confClass}">
     <div class="match-header">
@@ -894,10 +935,16 @@ function renderMatchCard(j){
       <div class="score-bar"><div class="score-fill ${fillClass}" style="width:${score}%"></div></div>
     </div>
     <div class="betfair-odds">
-      <div><div class="betfair-logo">BETFAIR EXCHANGE</div><div class="betfair-market">Over 1.5 Gols</div></div>
-      <div class="betfair-odd ${!inRange?'out-range':''}">${j.betfairOdd.toFixed(2)}</div>
+      <div>
+        <div class="betfair-logo">BETFAIR EXCHANGE</div>
+        <div class="betfair-market">Over 1.5 · <span style="color:${oddColor};font-size:10px;font-weight:700">${oddLabel}</span></div>
+      </div>
+      <div style="text-align:right">
+        <div class="betfair-odd" style="color:${oddColor}">${j.betfairOdd.toFixed(2)}</div>
+        <div style="font-size:11px;font-weight:700;color:${evColor}">EV ${evSign}${(ev*100).toFixed(1)}%</div>
+      </div>
     </div>
-    <button class="bet-btn ${canBet?'betfair-btn':'disabled'}" onclick="${canBet?`openModal('${betData}')`:''}">${canBet?'📝 Aposta Manual':'❌ '+(score<state.config.scoreMin?'Score insuficiente':'Odd fora do intervalo')}</button>
+    <button class="bet-btn ${canBet?'betfair-btn':'disabled'}" onclick="${canBet?`openModal('${betData}')`:''}">${canBet?`📝 Aposta Manual · ${getEVLabel(ev)}`:'❌ '+(score<state.config.scoreMin?'Score insuficiente':'EV negativo')}</button>
   </div>`;
 }
 
