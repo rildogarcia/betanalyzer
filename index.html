@@ -721,14 +721,16 @@ async function fetchTeamStats(teamId, leagueId, season){
 
     let goalsFor=0, goalsAgainst=0, wins=0, form='';
     fixtures.forEach(f=>{
-      const isHome=f.teams.home.id===teamId;
-      const gf=isHome?(f.goals.home||0):(f.goals.away||0);
-      const ga=isHome?(f.goals.away||0):(f.goals.home||0);
+      // Comparação com coerção de tipo para garantir match
+      const isHome=String(f.teams.home.id)===String(teamId);
+      const gf=isHome?(f.goals.home??0):(f.goals.away??0);
+      const ga=isHome?(f.goals.away??0):(f.goals.home??0);
       goalsFor+=gf;
       goalsAgainst+=ga;
-      const homeWin=f.teams.home.winner;
-      const won=isHome?homeWin===true:homeWin===false;
-      const draw=homeWin===null;
+      const homeWinner=f.teams.home.winner;
+      const awayWinner=f.teams.away.winner;
+      const won=isHome?(homeWinner===true):(awayWinner===true);
+      const draw=(homeWinner===null&&awayWinner===null);
       wins+=won?1:0;
       form+=(won?'W':draw?'D':'L');
     });
