@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Debug</title>
+<style>
+  body { background:#080c14; color:#e2e8f0; font-family:monospace; padding:16px; }
+  input { width:100%; background:#111827; border:1px solid #1e2d42; color:#e2e8f0; padding:10px; border-radius:8px; font-size:14px; margin-bottom:10px; box-sizing:border-box; }
+  button { width:100%; padding:12px; background:#00e5a0; border:none; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer; margin-bottom:10px; }
+  pre { background:#111827; border:1px solid #1e2d42; border-radius:8px; padding:12px; font-size:11px; overflow-x:auto; white-space:pre-wrap; word-break:break-all; max-height:60vh; overflow-y:auto; }
+  .label { font-size:12px; color:#546a85; margin-bottom:4px; }
+  .result { margin-top:16px; }
+  .stat { background:#161f30; border-radius:8px; padding:10px; margin-bottom:8px; }
+  .stat-title { color:#00e5a0; font-size:12px; font-weight:700; margin-bottom:6px; }
+  .stat-row { display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px; }
+  .stat-val { color:#ffb90f; font-weight:700; }
+</style>
+</head>
+<body>
+<h2 style="color:#00e5a0;margin-bottom:16px">🔍 API Debug</h2>
+
+<div class="label">API-Football Key</div>
+<input id="apiKey" type="password" placeholder="Sua chave">
+
+<div class="label">Team ID (ex: 1605 = LA FC)</div>
+<input id="teamId" value="1605">
+
+<button onclick="testAPI()">Testar API</button>
+<button onclick="testFixtures()" style="background:#3b82f6">Testar Fixtures do Dia</button>
+
+<div id="result"></div>
+
+<script>
+async function testAPI() {
+  const key = document.getElementById('apiKey').value.trim();
+  const teamId = document.getElementById('teamId').value.trim();
+  const el = document.getElementById('result');
+  
+  el.innerHTML = '<p style="color:#546a85">Carregando...</p>';
+  
+  try {
+    const resp = await fetch(`https://v3.football.api-sports.io/fixtures?team=${teamId}&last=10`, {
+      headers: { 'x-apisports-key': key }
+    });
+    const data = await resp.json();
+    
+    // Mostrar resumo
+    const fixtures = data.response || [];
+    let html = `<div class="stat"><div class="stat-title">📊 Resumo (${fixtures.length} jogos)</div>`;
+    
+    fixtures.forEach((f, i) => {
+      const isHome = String(f.teams.home.id) === String(teamId);
+      const gf = isHome ? (f.goals.home ?? 0) : (f.goals.away ?? 0);
+      const ga = isHome ? (f.goals.away ?? 0) : (f.goals.home ?? 0);
+      const homeWinner = f.teams.home.winner;
+      const awayWinner = f.teams.away.winner;
+      const won = isHome ? homeWinner === true : awayWinner === true;
+      const draw = homeWinner === null && awayWinner === null;
+      const result = won ? 'W' : draw ? 'D' : 'L';
+      
+      html += `<div class="stat-row">
+        <span>${f.teams.home.name} vs ${f.teams.away.name}</span>
+        <span class="stat-val">${f.goals.home}-${f.goals.away} (${result}) GF:${gf} GA:${ga}</span>
+      </div>`;
+    });
+    
+    if(fixtures.length > 0) {
+      let totalGF = 0, totalGA = 0;
+      fixtures.forEach(f => {
+        const isHome = String(f.teams.home.id) === String(teamId);
+        totalGF += isHome ? (f.goals.home ?? 0) : (f.goals.away ?? 0);
+        totalGA += isHome ? (f.goals.away ?? 0) : (f.goals.home ?? 0);
+      });
+      html += `<div class="stat-row" style="margin-top:8px;border-top:1px solid #1e2d42;padding-top:8px">
+        <span>MÉDIA CALCULADA</span>
+        <span class="stat-val">GF: ${(totalGF/fixtures.length).toFixed(2)} | GA: ${(totalGA/fixtures.length).toFixed(2)}</span>
+      </div>`;
+      
+      // Verificar IDs
+      html += `<div class="stat-row" style="color:#546a85">
+        <span>Team ID buscado vs retornado</span>
+        <span>${teamId} | home:${fixtures[0].teams.home.id} away:${fixtures[0].teams.away.id}</span>
+      </div>`;
+    }
+    
+    html += '</div>';
+    
+    // Raw JSON
+    html += `<div class="stat"><div class="stat-title">📄 JSON Bruto (primeiros 2 jogos)</div><pre>${JSON.stringify(fixtures.slice(0,2), null, 2)}</pre></div>`;
+
+```
+el.innerHTML = html;
+```
+
+} catch(e) {
+el.innerHTML = `<p style="color:#ef4444">Erro: ${e.message}</p>`;
+}
+}
+
+async function testFixtures() {
+const key = document.getElementById(‘apiKey’).value.trim();
+const el = document.getElementById(‘result’);
+const today = new Date().toISOString().split(‘T’)[0];
+
+el.innerHTML = ‘<p style="color:#546a85">Carregando fixtures do dia…</p>’;
+
+try {
+const resp = await fetch(`https://v3.football.api-sports.io/fixtures?date=${today}`, {
+headers: { ‘x-apisports-key’: key }
+});
+const data = await resp.json();
+const fixtures = data.response || [];
+
+```
+el.innerHTML = `<div class="stat">
+  <div class="stat-title">📅 Fixtures hoje: ${fixtures.length}</div>
+  <pre>${JSON.stringify(fixtures.slice(0,1), null, 2)}</pre>
+</div>`;
+```
+
+} catch(e) {
+el.innerHTML = `<p style="color:#ef4444">Erro: ${e.message}</p>`;
+}
+}
+</script>
+
+</body>
+</html>
