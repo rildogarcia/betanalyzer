@@ -500,9 +500,7 @@ async function loadJogos(){
   const date=getTargetDate();
 
   try{
-    const resp = await fetch(`https://v3.football.api-sports.io/fixtures?date=${date}`,{
-      headers:{'x-apisports-key': state.apiFootball}
-    });
+    const resp = await fetch(proxyUrl(`/fixtures?date=${date}`));
     const data = await resp.json();
     state.reqUsed++;
     saveState();
@@ -628,9 +626,7 @@ async function buscarResultadosPendentes(){
 
   for(const [data, jogos] of Object.entries(porData)){
     try{
-      const resp = await fetch(`https://v3.football.api-sports.io/fixtures?date=${data}&status=FT`,{
-        headers:{'x-apisports-key': state.apiFootball}
-      });
+      const resp = await fetch(proxyUrl(`/fixtures?date=${data}&status=FT`));
       const apiData = await resp.json();
       state.reqUsed++;
       saveState();
@@ -697,6 +693,13 @@ async function analyzeFixture(fix){
 
 function isCacheValid(ts){ return ts && (Date.now()-ts) < 24*60*60*1000; }
 
+const PROXY = 'https://dry-resonance-53bd.rildo-fraga.workers.dev';
+
+function proxyUrl(endpoint) {
+  const target = encodeURIComponent(`https://v3.football.api-sports.io${endpoint}`);
+  return `${PROXY}?url=${target}&key=${state.apiFootball}`;
+}
+
 async function fetchTeamStatsCached(teamId, leagueId, season){
   const key=`stats_${teamId}_${leagueId}_${season}`;
   if(statsCache[key] && isCacheValid(statsCache[key].ts)){
@@ -712,9 +715,7 @@ async function fetchTeamStatsCached(teamId, leagueId, season){
 async function fetchTeamStats(teamId, leagueId, season){
   try{
     // Buscar últimos 10 jogos do time — metodologia de fase
-    const resp=await fetch(`https://v3.football.api-sports.io/fixtures?team=${teamId}&last=10`,{
-      headers:{'x-apisports-key': state.apiFootball}
-    });
+    const resp=await fetch(proxyUrl(`/fixtures?team=${teamId}&last=10`));
     const data=await resp.json();
     const fixtures=data.response||[];
     if(!fixtures.length) return defaultStats();
@@ -751,9 +752,7 @@ function defaultStats(){ return {goalsFor:1.5,goalsAgainst:1.2,played:10,wins:5,
 
 async function fetchH2H(h1,h2){
   try{
-    const resp=await fetch(`https://v3.football.api-sports.io/fixtures/headtohead?h2h=${h1}-${h2}&last=10`,{
-      headers:{'x-apisports-key': state.apiFootball}
-    });
+    const resp=await fetch(proxyUrl(`/fixtures/headtohead?h2h=${h1}-${h2}&last=10`));
     const data=await resp.json();
     const fixtures=data.response||[];
     if(!fixtures.length) return {avgGoals:0,total:0};
