@@ -349,7 +349,7 @@ const PROXY='https://dry-resonance-53bd.rildo-fraga.workers.dev';
 // ===================== STATE =====================
 let state={
   apiFootball:'',apiOdds:'',
-  config:{oddMin:1.30,oddMax:1.50,scoreMin:65},
+  config:{oddMin:1.30,oddMax:1.50,scoreMin:50},
   selectedDate:'hoje',
   selectedBet:null,
   reqUsed:0,
@@ -487,7 +487,7 @@ function salvarNoHistorico(analysis){
     score:analysis.score,
     ev:calcEV(analysis.score,analysis.betfairOdd),
     betfairOdd:analysis.betfairOdd,
-    recomendado:analysis.score>=state.config.scoreMin&&calcEV(analysis.score,analysis.betfairOdd)>=0,
+    recomendado:analysis.score>=state.config.scoreMin&&(calcEV(analysis.score,analysis.betfairOdd)===null||calcEV(analysis.score,analysis.betfairOdd)>=0),
     // Fatores detalhados para auditoria
     fatores:{
       ataque:{valor:(analysis.homeStats.goalsFor+analysis.awayStats.goalsFor)/2,pontos:analysis.scoreBreakdown.ataque},
@@ -657,7 +657,7 @@ function calculateScore(home,away,h2h,leagueId){
 }
 
 function countWins(form){if(!form||!form.length)return 0.5;return(form.match(/W/g)||[]).length/form.length}
-function calcEV(score,odd){if(!odd)return-1;return parseFloat(((score/100*odd)-1).toFixed(3))}
+function calcEV(score,odd){if(!odd||odd<=0)return null;return parseFloat(((score/100*odd)-1).toFixed(3))}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
 
 // ===================== RENDER JOGOS =====================
@@ -665,7 +665,10 @@ function renderJogos(jogos){
   const el=document.getElementById('jogosList');
   if(!jogos||!jogos.length){el.innerHTML=`<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nenhum jogo encontrado.</div></div>`;return}
   const cfg=state.config;
-  const recomendados=jogos.filter(j=>j.score>=cfg.scoreMin&&calcEV(j.score,j.betfairOdd)>=0&&j.betfairOdd);
+  const recomendados=jogos.filter(j=>{
+    const ev=calcEV(j.score,j.betfairOdd);
+    return j.score>=cfg.scoreMin&&(ev===null||ev>=0);
+  });
   const outros=jogos.filter(j=>!recomendados.includes(j));
   let html='';
   if(recomendados.length>0){
@@ -684,18 +687,19 @@ function renderJogos(jogos){
 function renderMatchCard(j){
   const score=j.score;
   const ev=calcEV(score,j.betfairOdd);
+  const evPositivo=ev===null||ev>=0;
   const confClass=score>=75?'high-conf':score>=55?'med-conf':'low-conf';
   const fillClass=score>=75?'fill-high':score>=55?'fill-med':'fill-low';
-  const canBet=score>=state.config.scoreMin&&ev>=0&&j.betfairOdd;
+  const canBet=score>=state.config.scoreMin&&evPositivo&&j.betfairOdd;
   const time=new Date(j.time).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const betData=encodeURIComponent(JSON.stringify({id:j.fixtureId,home:j.homeTeam,away:j.awayTeam,odd:j.betfairOdd}));
 
-  const inRange=j.betfairOdd>=state.config.oddMin&&j.betfairOdd<=state.config.oddMax;
-  const aboveRange=j.betfairOdd>state.config.oddMax;
+  const inRange=j.betfairOdd&&j.betfairOdd>=state.config.oddMin&&j.betfairOdd<=state.config.oddMax;
+  const aboveRange=j.betfairOdd&&j.betfairOdd>state.config.oddMax;
   const oddColor=aboveRange?'var(--success)':inRange?'var(--betfair)':'var(--muted)';
   const oddLabel=aboveRange?'⬆ Value!':inRange?'✓ Na faixa':'↓ Abaixo';
-  const evColor=ev>=0.20?'var(--success)':ev>=0.10?'var(--accent)':ev>=0?'var(--warning)':'var(--danger)';
-  const evSign=ev>=0?'+':'';
+  const evColor=ev===null?'var(--muted)':ev>=0.20?'var(--success)':ev>=0.10?'var(--accent)':ev>=0?'var(--warning)':'var(--danger)';
+  const evDisplay=ev===null?'Sem odd Betfair':'EV '+(ev>=0?'+':'')+(ev*100).toFixed(1)+'%';
 
   // Breakdown visual
   const bd=j.scoreBreakdown;
