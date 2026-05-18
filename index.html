@@ -596,7 +596,6 @@ async function buscarResultados(){
 async function buscarResultadosPendentes(){
   if(!state.apiFootball) return;
 
-  // Pegar jogos pendentes de resultado que já deveriam ter terminado
   const agora = new Date();
   const pendentes = state.jogosHistorico.filter(j => {
     if(j.resultado !== null) return false;
@@ -607,7 +606,7 @@ async function buscarResultadosPendentes(){
 
   if(pendentes.length === 0) return;
 
-  // Agrupar por data para economizar requisições
+  // Agrupar por data para usar 1 requisição por dia
   const porData = {};
   pendentes.forEach(j => {
     const data = j.time.split('T')[0];
@@ -615,30 +614,39 @@ async function buscarResultadosPendentes(){
     porData[data].push(j);
   });
 
+  let atualizados = 0;
+
   for(const [data, jogos] of Object.entries(porData)){
     try{
-      const resp = await fetch(proxyUrl(`/fixtures?date=${data}&status=FT`));
+      // Sem filtro de status — pega todos os jogos do dia incluindo FT, AET, PEN
+      const resp = await fetch(proxyUrl(`/fixtures?date=${data}`));
       const apiData = await resp.json();
       state.reqUsed++;
       saveState();
 
       const fixtures = apiData.response || [];
-      
+
       jogos.forEach(jogo => {
         const fixture = fixtures.find(f => f.fixture.id === jogo.fixtureId);
         if(fixture){
-          const totalGols = (fixture.goals.home || 0) + (fixture.goals.away || 0);
-          jogo.golsMarcados = totalGols;
-          jogo.resultado = totalGols > 1.5 ? 'over' : 'under';
+          const status = fixture.fixture.status.short;
+          // Só atualiza se o jogo terminou de fato
+          if(['FT','AET','PEN'].includes(status)){
+            const totalGols = (fixture.goals.home || 0) + (fixture.goals.away || 0);
+            jogo.golsMarcados = totalGols;
+            jogo.resultado = totalGols > 1.5 ? 'over' : 'under';
+            atualizados++;
+          }
         }
       });
 
-      await sleep(200);
+      await sleep(150);
     }catch(e){}
   }
 
   saveState();
   updateCounters();
+  if(atualizados > 0) showToast(`✅ ${atualizados} resultado(s) atualizados!`);
 }
 
 // ===================== ANALYZE =====================
@@ -705,14 +713,11 @@ async function fetchTeamStatsCached(teamId, leagueId, season){
 
 async function fetchTeamStats(teamId, leagueId, season){
   try{
-    // Plano gratuito não suporta &last=10, então buscamos por temporada
-    const resp=await fetch(proxyUrl(`/fixtures?team=${teamId}&season=${season}&status=FT`));
+    // Plano Pro suporta &last=10 — busca os últimos 10 jogos direto
+    const resp=await fetch(proxyUrl(`/fixtures?team=${teamId}&last=10`));
     const data=await resp.json();
-    const allFixtures=data.response||[];
-    if(!allFixtures.length) return defaultStats();
-
-    // Pegar apenas os últimos 10 jogos
-    const fixtures=allFixtures.slice(-10);
+    const fixtures=data.response||[];
+    if(!fixtures.length) return defaultStats();
 
     let goalsFor=0, goalsAgainst=0, wins=0, form='';
     fixtures.forEach(f=>{
@@ -756,24 +761,35 @@ async function fetchH2H(h1,h2){
 
 async function fetchBetfairOdd(fix){
   try{
-    const resp=await fetch(`https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey=${state.apiOdds}&regions=uk&markets=totals&oddsFormat=decimal&bookmakers=betfair_ex_uk`);
-    if(!resp.ok) return generateSimulatedOdd();
-    const data=await resp.json();
     const homeName=fix.teams.home.name.toLowerCase();
     const awayName=fix.teams.away.name.toLowerCase();
-    const match=data.find(g=>{
-      const h=(g.home_team||'').toLowerCase();
-      const a=(g.away_team||'').toLowerCase();
-      return (h.includes(homeName.split(' ')[0])||homeName.includes(h.split(' ')[0]))&&
-             (a.includes(awayName.split(' ')[0])||awayName.includes(a.split(' ')[0]));
-    });
-    if(!match) return generateSimulatedOdd();
-    const bf=match.bookmakers?.find(b=>b.key==='betfair_ex_uk');
-    if(!bf) return generateSimulatedOdd();
-    const totals=bf.markets?.find(m=>m.key==='totals');
-    if(!totals) return generateSimulatedOdd();
-    const over15=totals.outcomes?.find(o=>o.name==='Over'&&parseFloat(o.point)===1.5);
-    return over15 ? parseFloat(over15.price.toFixed(2)) : generateSimulatedOdd();
+
+    // Tentar EU primeiro (Betfair Brasil), depois UK como fallback
+    for(const [region, bfKey] of [['eu','betfair_ex_eu'],['uk','betfair_ex_uk']]){
+      const resp=await fetch(`https://api.the-odds-api.com/v4/sports/soccer/odds/?apiKey=${state.apiOdds}&regions=${region}&markets=totals&oddsFormat=decimal`);
+      if(!resp.ok) continue;
+      const data=await resp.json();
+
+      const match=data.find(g=>{
+        const h=(g.home_team||'').toLowerCase();
+        const a=(g.away_team||'').toLowerCase();
+        const homeMatch=h.includes(homeName.split(' ')[0])||homeName.includes(h.split(' ')[0]);
+        const awayMatch=a.includes(awayName.split(' ')[0])||awayName.includes(a.split(' ')[0]);
+        return homeMatch && awayMatch;
+      });
+      if(!match) continue;
+
+      // Tentar Betfair primeiro, depois qualquer bookmaker disponível
+      const bf=match.bookmakers?.find(b=>b.key===bfKey) || match.bookmakers?.[0];
+      if(!bf) continue;
+
+      const totals=bf.markets?.find(m=>m.key==='totals');
+      if(!totals) continue;
+
+      const over15=totals.outcomes?.find(o=>o.name==='Over'&&parseFloat(o.point)===1.5);
+      if(over15) return parseFloat(over15.price.toFixed(2));
+    }
+    return generateSimulatedOdd();
   }catch(e){ return generateSimulatedOdd(); }
 }
 
@@ -953,17 +969,55 @@ function renderResultados(){
   const pendentes=state.jogosHistorico.filter(j=>j.resultado===null);
   const comResultado=state.jogosHistorico.filter(j=>j.resultado!==null);
 
+  // Separar pendentes em antigos (>2 dias) e recentes
+  const agora=new Date();
+  const antigos=pendentes.filter(j=>(agora-new Date(j.time))>2*24*60*60*1000);
+  const recentes=pendentes.filter(j=>(agora-new Date(j.time))<=2*24*60*60*1000);
+
   let html='';
 
-  if(pendentes.length>0){
-    html+=`<div class="section-title">⏳ Aguardando Resultado (${pendentes.length})</div>`;
-    pendentes.slice(0,200).forEach(j=>{
+  // Botões de ação
+  html+=`<div style="display:flex;gap:8px;margin-bottom:12px">
+    <button class="update-btn" style="flex:1" onclick="buscarResultados()">🔄 Buscar Resultados</button>
+    ${antigos.length>0?`<button class="update-btn" style="flex:1;border-color:rgba(239,68,68,0.3);color:var(--danger)" onclick="limparAntigos()">🗑 Limpar ${antigos.length} antigos</button>`:''}
+  </div>`;
+
+  if(recentes.length>0){
+    html+=`<div class="section-title">⏳ Aguardando Resultado (${recentes.length})</div>`;
+    recentes.forEach(j=>{
       const time=new Date(j.time).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
       const scoreColor=j.score>=75?'var(--accent)':j.score>=55?'var(--warning)':'var(--danger)';
       html+=`<div class="result-card">
         <div class="result-header">
           <div class="result-match">${j.homeTeam} vs ${j.awayTeam}</div>
-          <span class="result-status" style="color:var(--warning)">⏳ Pendente</span>
+          <div style="display:flex;gap:6px">
+            <button onclick="marcarResultado(${j.fixtureId},'over')" style="background:rgba(16,185,129,0.15);border:1px solid var(--success);color:var(--success);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer">✅ Over</button>
+            <button onclick="marcarResultado(${j.fixtureId},'under')" style="background:rgba(239,68,68,0.15);border:1px solid var(--danger);color:var(--danger);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer">❌ Under</button>
+          </div>
+        </div>
+        <div class="result-details">
+          <div class="result-chip">${j.league.flag} ${j.league.name}</div>
+          <div class="result-chip">Score: <span style="color:${scoreColor}">${j.score}%</span></div>
+          <div class="result-chip">Odd: <span>${j.betfairOdd?.toFixed(2)||'—'}</span></div>
+          <div class="result-chip">📅 <span>${time}</span></div>
+        </div>
+      </div>`;
+    });
+  }
+
+  if(antigos.length>0){
+    html+=`<div class="section-title" style="color:var(--danger)">⚠️ Sem Resultado (${antigos.length} antigos)</div>`;
+    antigos.slice(0,20).forEach(j=>{
+      const time=new Date(j.time).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+      const scoreColor=j.score>=75?'var(--accent)':j.score>=55?'var(--warning)':'var(--danger)';
+      html+=`<div class="result-card" style="opacity:0.6">
+        <div class="result-header">
+          <div class="result-match">${j.homeTeam} vs ${j.awayTeam}</div>
+          <div style="display:flex;gap:6px">
+            <button onclick="marcarResultado(${j.fixtureId},'over')" style="background:rgba(16,185,129,0.15);border:1px solid var(--success);color:var(--success);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer">✅</button>
+            <button onclick="marcarResultado(${j.fixtureId},'under')" style="background:rgba(239,68,68,0.15);border:1px solid var(--danger);color:var(--danger);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer">❌</button>
+            <button onclick="removerJogo(${j.fixtureId})" style="background:rgba(100,116,133,0.15);border:1px solid var(--muted);color:var(--muted);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer">🗑</button>
+          </div>
         </div>
         <div class="result-details">
           <div class="result-chip">${j.league.flag} ${j.league.name}</div>
@@ -977,7 +1031,7 @@ function renderResultados(){
 
   if(comResultado.length>0){
     html+=`<div class="section-title">✅ Com Resultado (${comResultado.length})</div>`;
-    comResultado.slice(0,50).forEach(j=>{
+    comResultado.slice(0,100).forEach(j=>{
       const acertou=j.resultado==='over';
       const scoreColor=j.score>=75?'var(--accent)':j.score>=55?'var(--warning)':'var(--danger)';
       const time=new Date(j.time).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
@@ -989,7 +1043,7 @@ function renderResultados(){
         <div class="result-details">
           <div class="result-chip">${j.league.flag} ${j.league.name}</div>
           <div class="result-chip">Score: <span style="color:${scoreColor}">${j.score}%</span></div>
-          <div class="result-chip">Gols: <span>${j.golsMarcados}</span></div>
+          <div class="result-chip">Gols: <span>${j.golsMarcados??'—'}</span></div>
           <div class="result-chip">Odd: <span>${j.betfairOdd?.toFixed(2)||'—'}</span></div>
           <div class="result-chip">📅 <span>${time}</span></div>
         </div>
@@ -998,6 +1052,38 @@ function renderResultados(){
   }
 
   el.innerHTML=html;
+}
+
+function marcarResultado(fixtureId, resultado){
+  const j=state.jogosHistorico.find(x=>x.fixtureId===fixtureId);
+  if(!j) return;
+  j.resultado=resultado;
+  j.golsMarcados=resultado==='over'?2:1; // estimativa
+  saveState();
+  renderResultados();
+  renderCalibracao();
+  showToast(resultado==='over'?'✅ Marcado como OVER':'❌ Marcado como UNDER');
+}
+
+function removerJogo(fixtureId){
+  state.jogosHistorico=state.jogosHistorico.filter(j=>j.fixtureId!==fixtureId);
+  saveState();
+  updateCounters();
+  renderResultados();
+  showToast('🗑 Jogo removido');
+}
+
+function limparAntigos(){
+  if(!confirm('Remover todos os jogos sem resultado com mais de 2 dias?')) return;
+  const agora=new Date();
+  state.jogosHistorico=state.jogosHistorico.filter(j=>{
+    if(j.resultado!==null) return true;
+    return (agora-new Date(j.time))<=2*24*60*60*1000;
+  });
+  saveState();
+  updateCounters();
+  renderResultados();
+  showToast('🗑 Jogos antigos removidos');
 }
 
 // ===================== RENDER CALIBRACAO =====================
