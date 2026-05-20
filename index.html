@@ -419,9 +419,19 @@ function selectDate(d){
   loadJogos();
 }
 function getTargetDate(){
-  const d=new Date();
-  if(state.selectedDate==='amanha')d.setDate(d.getDate()+1);
-  return d.toISOString().split('T')[0];
+  // Usar fuso horário do Brasil (UTC-3) para calcular a data correta
+  const now=new Date();
+  const brOffset=-3*60; // UTC-3 em minutos
+  const brTime=new Date(now.getTime()+brOffset*60000+now.getTimezoneOffset()*60000);
+  if(state.selectedDate==='amanha')brTime.setDate(brTime.getDate()+1);
+  return brTime.toISOString().split('T')[0];
+}
+
+function getBrNow(){
+  // Data/hora atual no Brasil
+  const now=new Date();
+  const brOffset=-3*60;
+  return new Date(now.getTime()+brOffset*60000+now.getTimezoneOffset()*60000);
 }
 
 // ===================== LOAD JOGOS =====================
@@ -444,10 +454,11 @@ async function loadJogos(){
 
     if(data.errors&&Object.keys(data.errors).length>0)throw new Error(JSON.stringify(data.errors));
 
-    const now=new Date();
+    const brNow=getBrNow();
     const fixtures=(data.response||[]).filter(f=>{
       const isOurLeague=LEAGUE_IDS.includes(f.league.id);
-      const notStarted=state.selectedDate==='amanha'||new Date(f.fixture.date)>now;
+      const fixtureDate=new Date(f.fixture.date);
+      const notStarted=state.selectedDate==='amanha'||fixtureDate>new Date();
       return isOurLeague&&notStarted;
     });
 
@@ -790,12 +801,12 @@ function renderAuditoria(){
       <span style="font-family:'JetBrains Mono',monospace;font-size:12px">${state.jogosHistorico.length} jogos</span>
     </div>
     <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-      <span style="font-size:12px;color:var(--muted)">Recomendados</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)">${recomendados.length} jogos</span>
+      <span style="font-size:12px;color:var(--muted)">✅ Recomendados</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent)">${recomendados.length}</span>
     </div>
     <div style="display:flex;justify-content:space-between">
-      <span style="font-size:12px;color:var(--muted)">Não recomendados</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)">${naoRecomendados.length} jogos</span>
+      <span style="font-size:12px;color:var(--muted)">🔍 Não recomendados</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)">${naoRecomendados.length}</span>
     </div>
   </div>`;
 
@@ -813,64 +824,65 @@ function renderAuditoria(){
 }
 
 function renderAuditCard(j,rec){
-  const acertou=j.resultado==='over';
-  const errou=j.resultado==='under';
-  const resultColor=acertou?'var(--success)':errou?'var(--danger)':'var(--warning)';
-  const resultLabel=acertou?`✅ OVER (${j.golsMarcados} gols)`:errou?`❌ UNDER (${j.golsMarcados} gols)`:'⏳ Pendente';
-  const time=new Date(j.time).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-  const f=j.fatores;
+  try{
+    const acertou=j.resultado==='over';
+    const errou=j.resultado==='under';
+    const resultColor=acertou?'var(--success)':errou?'var(--danger)':'var(--warning)';
+    const resultLabel=acertou?`✅ OVER (${j.golsMarcados} gols)`:errou?`❌ UNDER (${j.golsMarcados} gols)`:'⏳ Pendente';
+    const time=new Date(j.time).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const f=j.fatores;
 
-  // Detectar outlier
-  const outlierAtaque=f.ataque.media&&Math.abs(f.ataque.media-f.ataque.mediana)>0.8;
-  const outlierDefesa=f.defesa.media&&Math.abs(f.defesa.media-f.defesa.mediana)>0.8;
+    const ev=j.evRegistrado!==undefined?j.evRegistrado:j.oddRegistrada?calcEV(j.score,j.oddRegistrada):null;
+    const evStr=ev!==null?`${ev>=0?'+':''}${(ev*100).toFixed(1)}%`:'—';
+    const evColor=ev===null?'var(--muted)':ev>=0.10?'var(--success)':ev>=0?'var(--warning)':'var(--danger)';
+    const questionavel=j.entradaQuestionavel?`<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:4px 8px;font-size:10px;color:var(--danger);margin-top:4px">⚠️ Entrada com EV negativo registrada</div>`:'';
 
-  const ev=j.evRegistrado!==undefined?j.evRegistrado:j.oddRegistrada?calcEV(j.score,j.oddRegistrada):null;
-  const evStr=ev!==null?`${ev>=0?'+':''}${(ev*100).toFixed(1)}%`:'—';
-  const evColor=ev===null?'var(--muted)':ev>=0.10?'var(--success)':ev>=0?'var(--warning)':'var(--danger)';
-  const questionavel=j.entradaQuestionavel?`<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:4px 8px;font-size:10px;color:var(--danger);margin-top:4px">⚠️ Entrada com EV negativo registrada</div>`:'';
+    // Fatores com fallback completo para qualquer formato de dados
+    let fatoresHtml='';
+    if(f&&f.ataque&&f.ataque.mediana!==undefined){
+      const outlierAtaque=f.ataque.media&&Math.abs(f.ataque.media-f.ataque.mediana)>0.8;
+      const outlierDefesa=f.defesa&&f.defesa.media&&Math.abs(f.defesa.media-f.defesa.mediana)>0.8;
+      fatoresHtml=`<div class="audit-factors">
+        <div class="audit-factors-title">Fatores — mediana dos últimos 10 jogos</div>
+        <div class="audit-factor-row"><span class="audit-factor-label">⚽ Ataque</span><span class="audit-factor-val" style="color:var(--accent)">${f.ataque.mediana.toFixed(2)} gols${outlierAtaque?` <span style="color:var(--warning)">(méd:${f.ataque.media.toFixed(2)} ⚠️)</span>`:''} → ${f.ataque.pontos}/30</span></div>
+        <div class="audit-factor-row"><span class="audit-factor-label">🛡 Defesa</span><span class="audit-factor-val" style="color:var(--accent2)">${f.defesa.mediana.toFixed(2)} sofridos${outlierDefesa?` <span style="color:var(--warning)">(méd:${f.defesa.media.toFixed(2)} ⚠️)</span>`:''} → ${f.defesa.pontos}/25</span></div>
+        <div class="audit-factor-row"><span class="audit-factor-label">🏆 Liga</span><span class="audit-factor-val" style="color:var(--warning)">${f.liga.valor} gols/jogo → ${f.liga.pontos}/10</span></div>
+        <div class="audit-factor-row"><span class="audit-factor-label">⚔ H2H (${f.h2h.jogos})</span><span class="audit-factor-val">${f.h2h.jogos>0?f.h2h.valor.toFixed(2)+' gols':'Sem dados'} → ${f.h2h.pontos}/20</span></div>
+        <div class="audit-factor-row"><span class="audit-factor-label">📈 Forma</span><span class="audit-factor-val">${f.forma.homeForm||'—'} / ${f.forma.awayForm||'—'} → ${f.forma.pontos}/15</span></div>
+      </div>`;
+    } else if(f&&f.ataque&&f.ataque.valor!==undefined){
+      fatoresHtml=`<div class="audit-factors">
+        <div class="audit-factors-title" style="color:var(--warning)">⚠️ Dados sem mediana (versão anterior)</div>
+        <div class="audit-factor-row"><span class="audit-factor-label">⚽ Ataque</span><span class="audit-factor-val">${(f.ataque.valor||0).toFixed(2)} gols → ${f.ataque.pontos}/30</span></div>
+        <div class="audit-factor-row"><span class="audit-factor-label">🛡 Defesa</span><span class="audit-factor-val">${(f.defesa.valor||0).toFixed(2)} sofridos → ${f.defesa.pontos}/25</span></div>
+        <div class="audit-factor-row"><span class="audit-factor-label">🏆 Liga</span><span class="audit-factor-val">${f.liga.valor} → ${f.liga.pontos}/10</span></div>
+        <div class="audit-factor-row"><span class="audit-factor-label">⚔ H2H</span><span class="audit-factor-val">${f.h2h.pontos}/20</span></div>
+        <div class="audit-factor-row"><span class="audit-factor-label">📈 Forma</span><span class="audit-factor-val">${f.forma.homeForm||'—'} / ${f.forma.awayForm||'—'} → ${f.forma.pontos}/15</span></div>
+      </div>`;
+    } else {
+      fatoresHtml=`<div style="font-size:11px;color:var(--muted);padding:8px 0">Detalhes não disponíveis para este jogo.</div>`;
+    }
 
-  return `<div class="audit-card" style="border-left:3px solid ${rec?'var(--accent)':'var(--border)'}">
-    <div class="audit-header">
-      <div>
-        <div class="audit-match">${j.homeTeam} vs ${j.awayTeam}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">${j.league.flag} ${j.league.name} · ${time}</div>
+    return `<div class="audit-card" style="border-left:3px solid ${rec?'var(--accent)':'var(--border)'}">
+      <div class="audit-header">
+        <div>
+          <div class="audit-match">${j.homeTeam} vs ${j.awayTeam}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${j.league?.flag||''} ${j.league?.name||''} · ${time}</div>
+        </div>
+        <div class="audit-result" style="color:${resultColor}">${resultLabel}</div>
       </div>
-      <div class="audit-result" style="color:${resultColor}">${resultLabel}</div>
-    </div>
-    <div class="audit-meta">
-      <div class="audit-chip">Score: <span>${j.score}%</span></div>
-      <div class="audit-chip">Odd: <span style="color:var(--betfair)">${j.oddRegistrada?.toFixed(2)||'—'}</span></div>
-      <div class="audit-chip">EV: <span style="color:${evColor}">${evStr}</span></div>
-      <div class="audit-chip">${rec?'✅ Recomendado':'❌ Não rec.'}</div>
-    </div>
-    <div class="audit-factors">
-      <div class="audit-factors-title">Fatores — mediana dos últimos 10 jogos</div>
-      <div class="audit-factor-row">
-        <span class="audit-factor-label">⚽ Ataque combinado</span>
-        <span class="audit-factor-val" style="color:var(--accent)">
-          ${f.ataque.mediana.toFixed(2)} gols/jogo${outlierAtaque?` <span style="color:var(--warning)">(méd: ${f.ataque.media.toFixed(2)} ⚠️)</span>`:''} → ${f.ataque.pontos}/30pts
-        </span>
+      <div class="audit-meta">
+        <div class="audit-chip">Score: <span>${j.score}%</span></div>
+        <div class="audit-chip">Odd: <span style="color:var(--betfair)">${j.oddRegistrada?.toFixed(2)||'—'}</span></div>
+        <div class="audit-chip">EV: <span style="color:${evColor}">${evStr}</span></div>
+        <div class="audit-chip">${rec?'✅ Rec.':'❌ Não rec.'}</div>
       </div>
-      <div class="audit-factor-row">
-        <span class="audit-factor-label">🛡 Defesa combinada</span>
-        <span class="audit-factor-val" style="color:var(--accent2)">
-          ${f.defesa.mediana.toFixed(2)} sofridos${outlierDefesa?` <span style="color:var(--warning)">(méd: ${f.defesa.media.toFixed(2)} ⚠️)</span>`:''} → ${f.defesa.pontos}/25pts
-        </span>
-      </div>
-      <div class="audit-factor-row">
-        <span class="audit-factor-label">🏆 Média da liga</span>
-        <span class="audit-factor-val" style="color:var(--warning)">${f.liga.valor} gols/jogo → ${f.liga.pontos}/10pts</span>
-      </div>
-      <div class="audit-factor-row">
-        <span class="audit-factor-label">⚔ H2H (${f.h2h.jogos} jogos)</span>
-        <span class="audit-factor-val">${f.h2h.jogos>0?f.h2h.valor.toFixed(2)+' gols/jogo':'Sem dados'} → ${f.h2h.pontos}/20pts</span>
-      </div>
-      <div class="audit-factor-row">
-        <span class="audit-factor-label">📈 Forma recente</span>
-        <span class="audit-factor-val">${f.forma.homeForm||'—'} / ${f.forma.awayForm||'—'} → ${f.forma.pontos}/15pts</span>
-      </div>
-    </div>
-  </div>`;
+      ${questionavel}
+      ${fatoresHtml}
+    </div>`;
+  }catch(e){
+    return `<div class="audit-card"><div class="audit-match">${j?.homeTeam||'?'} vs ${j?.awayTeam||'?'}</div><div style="font-size:11px;color:var(--muted)">Erro ao renderizar.</div></div>`;
+  }
 }
 
 // ===================== BUSCAR RESULTADOS =====================
@@ -937,10 +949,9 @@ function renderResultados(){
       html+=`<div class="result-card">
         <div class="result-header"><div class="result-match">${j.homeTeam} vs ${j.awayTeam}</div><span style="color:var(--warning)">⏳</span></div>
         <div class="result-details">
-          <div class="result-chip">${j.league.flag} ${j.league.name}</div>
+          <div class="result-chip">${j.league?.flag||''} ${j.league?.name||''}</div>
           <div class="result-chip">Score: <span>${j.score}%</span></div>
-          <div class="result-chip">EV: <span>${j.ev>=0?'+':''}${(j.ev*100).toFixed(1)}%</span></div>
-          <div class="result-chip">Odd: <span>${j.betfairOdd?.toFixed(2)||'—'}</span></div>
+          <div class="result-chip">Odd: <span>${j.oddRegistrada?.toFixed(2)||'—'}</span></div>
           <div class="result-chip">📅 <span>${time}</span></div>
         </div>
       </div>`;
@@ -952,16 +963,18 @@ function renderResultados(){
     comResultado.forEach(j=>{
       const acertou=j.resultado==='over';
       const time=new Date(j.time).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+      const ev=j.evRegistrado!==undefined?j.evRegistrado:j.oddRegistrada?calcEV(j.score,j.oddRegistrada):null;
+      const evStr=ev!==null?`${ev>=0?'+':''}${(ev*100).toFixed(1)}%`:'—';
       html+=`<div class="result-card" style="border-left:3px solid ${acertou?'var(--success)':'var(--danger)'}">
         <div class="result-header">
           <div class="result-match">${j.homeTeam} vs ${j.awayTeam}</div>
           <span style="color:${acertou?'var(--success)':'var(--danger)'};font-weight:700">${acertou?'✅ OVER':'❌ UNDER'} (${j.golsMarcados} gols)</span>
         </div>
         <div class="result-details">
-          <div class="result-chip">${j.league.flag} ${j.league.name}</div>
+          <div class="result-chip">${j.league?.flag||''} ${j.league?.name||''}</div>
           <div class="result-chip">Score: <span>${j.score}%</span></div>
-          <div class="result-chip">EV: <span>${j.ev>=0?'+':''}${(j.ev*100).toFixed(1)}%</span></div>
-          <div class="result-chip">Odd: <span>${j.betfairOdd?.toFixed(2)||'—'}</span></div>
+          <div class="result-chip">EV: <span>${evStr}</span></div>
+          <div class="result-chip">Odd: <span>${j.oddRegistrada?.toFixed(2)||'—'}</span></div>
           <div class="result-chip">📅 <span>${time}</span></div>
         </div>
       </div>`;
