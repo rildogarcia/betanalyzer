@@ -444,22 +444,47 @@ async function loadJogos(){
   el.innerHTML='';
   setLoadingText('Buscando jogos...','');
 
-  const date=getTargetDate();
+  // Brasil é UTC-3. Jogos após 21h BRT passam para o dia seguinte em UTC.
+  // Buscamos a data BR alvo + data seguinte em UTC para capturar todos os jogos noturnos.
+  const brDate=getTargetDate();
+  const nextDay=new Date(brDate+'T03:00:00Z');
+  nextDay.setDate(nextDay.getDate()+1);
+  const nextDayStr=nextDay.toISOString().split('T')[0];
+
   try{
-    const resp=await fetch(proxyUrl(`/fixtures?date=${date}`));
-    const data=await resp.json();
-    state.reqUsed++;saveState();
+    // Buscar as duas datas UTC para cobrir jogos noturnos brasileiros
+    const [resp1,resp2]=await Promise.all([
+      fetch(proxyUrl(`/fixtures?date=${brDate}`)),
+      fetch(proxyUrl(`/fixtures?date=${nextDayStr}`)),
+    ]);
+    const [data1,data2]=await Promise.all([resp1.json(),resp2.json()]);
+    state.reqUsed+=2;saveState();
     document.getElementById('reqInfo').style.display='flex';
     document.getElementById('reqCount').textContent=state.reqUsed+' / 7500';
 
-    if(data.errors&&Object.keys(data.errors).length>0)throw new Error(JSON.stringify(data.errors));
+    // Combinar e deduplicar
+    const allRaw=[...(data1.response||[]),...(data2.response||[])];
+    const seen=new Set();
+    const allFixtures=allRaw.filter(f=>{
+      if(seen.has(f.fixture.id))return false;
+      seen.add(f.fixture.id);
+      return true;
+    });
 
-    const brNow=getBrNow();
-    const fixtures=(data.response||[]).filter(f=>{
-      const isOurLeague=LEAGUE_IDS.includes(f.league.id);
-      const fixtureDate=new Date(f.fixture.date);
-      const notStarted=state.selectedDate==='amanha'||fixtureDate>new Date();
-      return isOurLeague&&notStarted;
+    // Filtrar por liga e data brasileira
+    const fixtures=allFixtures.filter(f=>{
+      if(!LEAGUE_IDS.includes(f.league.id))return false;
+      // Converter para horário Brasil
+      const fixtureUTC=new Date(f.fixture.date);
+      const fixtureBR=new Date(fixtureUTC.getTime()-3*60*60*1000);
+      const fixtureBRDate=fixtureBR.toISOString().split('T')[0];
+
+      if(state.selectedDate==='amanha'){
+        return fixtureBRDate===brDate;
+      } else {
+        // Hoje: só jogos que ainda não começaram
+        return fixtureBRDate===brDate && fixtureUTC>new Date();
+      }
     });
 
     if(!fixtures.length){
@@ -467,6 +492,9 @@ async function loadJogos(){
       el.innerHTML=`<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nenhum jogo encontrado ${state.selectedDate==='hoje'?'hoje':'amanhã'}.</div></div>`;
       return;
     }
+
+    // Ordenar por horário
+    fixtures.sort((a,b)=>new Date(a.fixture.date)-new Date(b.fixture.date));
 
     document.getElementById('liveBadge').style.display='flex';
     setLoadingText(`Analisando ${fixtures.length} jogos...`,'Buscando estatísticas reais...');
@@ -483,7 +511,7 @@ async function loadJogos(){
       if(i<fixtures.length-1)await sleep(120);
     }
 
-    analyzed.sort((a,b)=>calcEV(b.score,b.betfairOdd)-calcEV(a.score,a.betfairOdd));
+    analyzed.sort((a,b)=>b.score-a.score);
     saveState();saveCache();updateCounters();
     document.getElementById('jogosLoading').style.display='none';
     renderJogos(analyzed);
