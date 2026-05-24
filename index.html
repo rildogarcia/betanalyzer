@@ -1203,7 +1203,7 @@ function saveConfig(){
   state.config.scoreMin=parseInt(document.getElementById('cfgScore').value);
   saveState();showToast('⚙️ Salvo');
 }
-function updateConfigStatus(){
+function resetApp(){if(!confirm('Tem certeza? Apagará todo o histórico.'))return;localStorage.clear();location.reload()}
   const el=document.getElementById('cfgApiFootballStatus');
   if(el)el.textContent=state.apiFootball?`••••${state.apiFootball.slice(-6)}`:'Não configurada';
 }
@@ -1223,7 +1223,64 @@ function editApiKey(type){
   state.apiFootball=key.trim();
   saveState();updateConfigStatus();showToast('🔑 Chave atualizada');
 }
-function resetApp(){if(!confirm('Tem certeza? Apagará todo o histórico.'))return;localStorage.clear();location.reload()}
+function exportarDados(){
+  // Pegar apenas jogos com resultado para análise
+  const comResultado=state.jogosHistorico.filter(j=>j.resultado!==null);
+
+  if(!comResultado.length){
+    showToast('Nenhum jogo com resultado ainda!');
+    return;
+  }
+
+  // Montar CSV limpo para análise
+  const linhas=[
+    'Jogo,Liga,Data,Score,Recomendado,Resultado,Gols,OddRegistrada,Ataque_Med,Ataque_Media,Defesa_Med,Defesa_Media,Liga_Pts,H2H_Gols,H2H_Jogos,Forma_Home,Forma_Away,Pts_Ataque,Pts_Defesa,Pts_Liga,Pts_H2H,Pts_Forma'
+  ];
+
+  comResultado.forEach(j=>{
+    const f=j.fatores||{};
+    const a=f.ataque||{};
+    const d=f.defesa||{};
+    const l=f.liga||{};
+    const h=f.h2h||{};
+    const fo=f.forma||{};
+
+    linhas.push([
+      `"${j.homeTeam} vs ${j.awayTeam}"`,
+      `"${j.league?.name||''}"`,
+      new Date(j.time).toLocaleDateString('pt-BR'),
+      j.score,
+      j.recomendado?'SIM':'NAO',
+      j.resultado==='over'?'OVER':'UNDER',
+      j.golsMarcados??'',
+      j.oddRegistrada?.toFixed(2)||'',
+      a.mediana?.toFixed(2)||a.valor?.toFixed(2)||'',
+      a.media?.toFixed(2)||'',
+      d.mediana?.toFixed(2)||d.valor?.toFixed(2)||'',
+      d.media?.toFixed(2)||'',
+      l.valor||'',
+      h.valor?.toFixed(2)||'',
+      h.jogos||'',
+      fo.homeForm||'',
+      fo.awayForm||'',
+      a.pontos||'',
+      d.pontos||'',
+      l.pontos||'',
+      h.pontos||'',
+      fo.pontos||'',
+    ].join(','));
+  });
+
+  const csv=linhas.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  link.href=url;
+  link.download=`betanalyzer_dados_${new Date().toISOString().split('T')[0]}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+  showToast(`📤 ${comResultado.length} jogos exportados!`);
+}
 
 // ===================== NAV =====================
 function showPage(name,btn){
