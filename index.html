@@ -381,20 +381,66 @@ function proxyUrl(endpoint){
 
 // ===================== INIT =====================
 loadState();loadCache();
+
+// Migração segura — corrige dados sem perder histórico
+try{
+  if(!state.config)state.config={oddMin:1.30,oddMax:1.50,scoreMin:50};
+  if(!state.config.oddMin)state.config.oddMin=1.30;
+  if(!state.config.oddMax)state.config.oddMax=1.50;
+  if(!state.config.scoreMin)state.config.scoreMin=50;
+  if(!Array.isArray(state.jogosHistorico))state.jogosHistorico=[];
+  if(!state.selectedDate)state.selectedDate='amanha';
+  if(typeof state.reqUsed!=='number')state.reqUsed=0;
+  saveState();
+}catch(e){console.warn('Migração:', e);}
+
 window.addEventListener('load',()=>{
-  renderConfig();renderLeagues();updateCounters();
-  if(!state.apiFootball){
-    document.getElementById('setupScreen').style.display='flex';
-    document.getElementById('jogosContent').style.display='none';
-  } else {
-    document.getElementById('setupScreen').style.display='none';
-    document.getElementById('dateSelectorWrap').style.display='flex';
-    document.getElementById('apiStatus').textContent='✅ API Ok';
-    // Botão Amanhã ativo por padrão
-    document.getElementById('btnAmanha').classList.add('active');
-    document.getElementById('btnHoje').classList.remove('active');
-    loadJogos();
-    setTimeout(()=>buscarResultadosPendentes(),3000);
+  try{
+    renderConfig();renderLeagues();updateCounters();
+    if(!state.apiFootball){
+      document.getElementById('setupScreen').style.display='flex';
+      document.getElementById('jogosContent').style.display='none';
+    } else {
+      document.getElementById('setupScreen').style.display='none';
+      document.getElementById('dateSelectorWrap').style.display='flex';
+      document.getElementById('apiStatus').textContent='✅ API Ok';
+      document.getElementById('btnAmanha').classList.add('active');
+      document.getElementById('btnHoje').classList.remove('active');
+      loadJogos();
+      setTimeout(()=>buscarResultadosPendentes(),3000);
+    }
+  }catch(err){
+    // Mostrar botão de recuperação sem perder dados
+    document.body.innerHTML=`
+      <div style="background:#080c14;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;font-family:sans-serif;color:#e2e8f0;text-align:center">
+        <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+        <div style="font-size:20px;font-weight:700;color:#00e5a0;margin-bottom:8px">Erro de inicialização</div>
+        <div style="font-size:13px;color:#546a85;margin-bottom:24px">${err.message}</div>
+        <button onclick="exportarEmergencia()" style="background:linear-gradient(135deg,#3b82f6,#2563eb);border:none;border-radius:10px;color:#fff;font-weight:700;font-size:14px;padding:14px 24px;cursor:pointer;margin-bottom:12px;width:100%;max-width:320px">
+          📤 Exportar Dados Antes de Limpar
+        </button>
+        <button onclick="if(confirm('Isso vai resetar o app mas MANTER os dados exportados. Continuar?')){localStorage.removeItem('bav4_state');localStorage.removeItem('bav4_cache');location.reload()}" style="background:#ef4444;border:none;border-radius:10px;color:#fff;font-weight:700;font-size:14px;padding:14px 24px;cursor:pointer;width:100%;max-width:320px">
+          🔄 Resetar App (mantém dados exportados)
+        </button>
+        <div id="emergencyExport" style="margin-top:16px;width:100%;max-width:320px;display:none">
+          <textarea id="emergencyTextarea" style="width:100%;height:200px;background:#0f1623;border:1px solid #1e2d42;border-radius:8px;color:#e2e8f0;font-size:10px;padding:8px;resize:none"></textarea>
+          <button onclick="document.getElementById('emergencyTextarea').select();document.execCommand('copy');alert('Copiado!')" style="background:#00e5a0;border:none;border-radius:8px;color:#000;font-weight:700;padding:10px;width:100%;margin-top:8px;cursor:pointer">📋 Copiar Dados</button>
+        </div>
+      </div>`;
+
+    window.exportarEmergencia=function(){
+      try{
+        const raw=localStorage.getItem('bav4_state');
+        if(!raw){alert('Nenhum dado encontrado');return}
+        const s=JSON.parse(raw);
+        const jogos=s.jogosHistorico||[];
+        const comResultado=jogos.filter(j=>j.resultado!==null);
+        const el=document.getElementById('emergencyExport');
+        const ta=document.getElementById('emergencyTextarea');
+        el.style.display='block';
+        ta.value=JSON.stringify(comResultado,null,2);
+      }catch(e){alert('Erro: '+e.message)}
+    };
   }
 });
 
@@ -705,7 +751,6 @@ function calculateScore(home,away,h2h,leagueId){
 }
 
 function countWins(form){if(!form||!form.length)return 0.5;return(form.match(/W/g)||[]).length/form.length}
-function calcEV(score,odd){if(!odd||odd<=0)return null;return parseFloat(((score/100*odd)-1).toFixed(3))}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
 
 // ===================== RENDER JOGOS =====================
