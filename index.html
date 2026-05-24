@@ -1204,6 +1204,7 @@ function saveConfig(){
   saveState();showToast('⚙️ Salvo');
 }
 function resetApp(){if(!confirm('Tem certeza? Apagará todo o histórico.'))return;localStorage.clear();location.reload()}
+function updateConfigStatus(){
   const el=document.getElementById('cfgApiFootballStatus');
   if(el)el.textContent=state.apiFootball?`••••${state.apiFootball.slice(-6)}`:'Não configurada';
 }
