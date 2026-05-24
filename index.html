@@ -297,6 +297,7 @@
     </div>
     <div style="margin-top:14px">
       <button class="bet-btn" onclick="loadJogos()" style="margin-bottom:8px">🔄 Atualizar Jogos</button>
+      <button class="bet-btn" onclick="exportarDados()" style="margin-bottom:8px;background:linear-gradient(135deg,var(--accent3),#2563eb)">📤 Exportar Dados para Análise</button>
       <button class="bet-btn secondary" onclick="clearCache()" style="margin-bottom:8px">🗑 Limpar Cache Stats</button>
       <button class="btn-cancel" style="width:100%;border-radius:9px;padding:11px" onclick="resetApp()">⚠️ Resetar tudo</button>
     </div>
@@ -419,19 +420,15 @@ function selectDate(d){
   loadJogos();
 }
 function getTargetDate(){
-  // Usar fuso horário do Brasil (UTC-3) para calcular a data correta
+  // Data no fuso Brasil (UTC-3)
   const now=new Date();
-  const brOffset=-3*60; // UTC-3 em minutos
-  const brTime=new Date(now.getTime()+brOffset*60000+now.getTimezoneOffset()*60000);
+  const brTime=new Date(now.getTime()-3*60*60*1000);
   if(state.selectedDate==='amanha')brTime.setDate(brTime.getDate()+1);
   return brTime.toISOString().split('T')[0];
 }
 
 function getBrNow(){
-  // Data/hora atual no Brasil
-  const now=new Date();
-  const brOffset=-3*60;
-  return new Date(now.getTime()+brOffset*60000+now.getTimezoneOffset()*60000);
+  return new Date(new Date().getTime()-3*60*60*1000);
 }
 
 // ===================== LOAD JOGOS =====================
