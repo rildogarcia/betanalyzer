@@ -335,20 +335,20 @@
 <script>
 // ===================== LEAGUES =====================
 const LEAGUES=[
-  {id:39, name:'Premier League',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',country:'Inglaterra',avgGoals:2.93},
-  {id:140,name:'La Liga',flag:'🇪🇸',country:'Espanha',avgGoals:2.62},
-  {id:135,name:'Serie A',flag:'🇮🇹',country:'Itália',avgGoals:2.56},
-  {id:78, name:'Bundesliga',flag:'🇩🇪',country:'Alemanha',avgGoals:3.14},
-  {id:61, name:'Ligue 1',flag:'🇫🇷',country:'França',avgGoals:2.96},
-  {id:88, name:'Eredivisie',flag:'🇳🇱',country:'Holanda',avgGoals:3.09},
-  {id:119,name:'Superliga',flag:'🇩🇰',country:'Dinamarca',avgGoals:3.14},
-  {id:71, name:'Brasileirão',flag:'🇧🇷',country:'Brasil',avgGoals:2.50},
-  {id:307,name:'Saudi Pro League',flag:'🇸🇦',country:'Arábia Saudita',avgGoals:3.10},
-  {id:253,name:'MLS',flag:'🇺🇸',country:'EUA',avgGoals:3.12},
-  {id:2,  name:'Champions League',flag:'🏆',country:'Europa',avgGoals:3.26},
-  {id:3,  name:'Europa League',flag:'🥈',country:'Europa',avgGoals:2.90},
-  {id:13, name:'Libertadores',flag:'🌎',country:'América do Sul',avgGoals:2.40},
-  {id:11, name:'Sul-Americana',flag:'🌎',country:'América do Sul',avgGoals:2.38},
+  {id:39, name:'Premier League',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',country:'Inglaterra',avgGoals:2.93,overRate:0.90},
+  {id:140,name:'La Liga',flag:'🇪🇸',country:'Espanha',avgGoals:2.62,overRate:0.75},
+  {id:135,name:'Serie A',flag:'🇮🇹',country:'Itália',avgGoals:2.56,overRate:0.72},
+  {id:78, name:'Bundesliga',flag:'🇩🇪',country:'Alemanha',avgGoals:3.14,overRate:0.85},
+  {id:61, name:'Ligue 1',flag:'🇫🇷',country:'França',avgGoals:2.96,overRate:0.78},
+  {id:88, name:'Eredivisie',flag:'🇳🇱',country:'Holanda',avgGoals:3.09,overRate:0.83},
+  {id:119,name:'Superliga',flag:'🇩🇰',country:'Dinamarca',avgGoals:3.14,overRate:0.83},
+  {id:71, name:'Brasileirão',flag:'🇧🇷',country:'Brasil',avgGoals:2.50,overRate:0.72},
+  {id:307,name:'Saudi Pro League',flag:'🇸🇦',country:'Arábia Saudita',avgGoals:3.10,overRate:0.80},
+  {id:253,name:'MLS',flag:'🇺🇸',country:'EUA',avgGoals:3.12,overRate:0.82},
+  {id:2,  name:'Champions League',flag:'🏆',country:'Europa',avgGoals:3.26,overRate:0.85},
+  {id:3,  name:'Europa League',flag:'🥈',country:'Europa',avgGoals:2.90,overRate:0.78},
+  // Libertadores REMOVIDA — 41.7% de over nos dados reais, abaixo do acaso
+  {id:11, name:'Sul-Americana',flag:'🌎',country:'América do Sul',avgGoals:2.38,overRate:0.74},
 ];
 const LEAGUE_IDS=LEAGUES.map(l=>l.id);
 const PROXY='https://dry-resonance-53bd.rildo-fraga.workers.dev';
@@ -356,7 +356,7 @@ const PROXY='https://dry-resonance-53bd.rildo-fraga.workers.dev';
 // ===================== STATE =====================
 let state={
   apiFootball:'',
-  config:{oddMin:1.30,oddMax:1.50,scoreMin:50},
+  config:{oddMin:1.30,oddMax:1.50,scoreMin:41},
   selectedDate:'amanha', // padrão é amanhã — análise noturna
   selectedBet:null,
   reqUsed:0,
@@ -579,18 +579,33 @@ function salvarNoHistorico(analysis){
     recomendado:analysis.score>=state.config.scoreMin,
     // Fatores detalhados para auditoria
     fatores:{
-      ataque:{
-        mediana:(analysis.homeStats.goalsFor+analysis.awayStats.goalsFor)/2,
-        media:(analysis.homeStats.goalsForMean+analysis.awayStats.goalsForMean)/2,
-        pontos:analysis.scoreBreakdown.ataque
-      },
       defesa:{
-        mediana:(analysis.homeStats.goalsAgainst+analysis.awayStats.goalsAgainst)/2,
+        mediana:(analysis.homeStats.contextGoalsAgainst??analysis.homeStats.goalsAgainst+analysis.awayStats.contextGoalsAgainst??analysis.awayStats.goalsAgainst)/2,
+        homeCtx:analysis.homeStats.contextGoalsAgainst,
+        awayCtx:analysis.awayStats.contextGoalsAgainst,
         media:(analysis.homeStats.goalsAgainstMean+analysis.awayStats.goalsAgainstMean)/2,
         pontos:analysis.scoreBreakdown.defesa
       },
-      liga:{valor:analysis.league.avgGoals,pontos:analysis.scoreBreakdown.liga},
-      h2h:{valor:analysis.h2hGols,jogos:analysis.h2hJogos,pontos:analysis.scoreBreakdown.h2h},
+      ataque:{
+        mediana:(analysis.homeStats.contextGoalsFor??analysis.homeStats.goalsFor+analysis.awayStats.contextGoalsFor??analysis.awayStats.goalsFor)/2,
+        homeCtx:analysis.homeStats.contextGoalsFor,
+        awayCtx:analysis.awayStats.contextGoalsFor,
+        media:(analysis.homeStats.goalsForMean+analysis.awayStats.goalsForMean)/2,
+        pontos:analysis.scoreBreakdown.ataque
+      },
+      liga:{valor:analysis.league.avgGoals,overRate:analysis.league.overRate,pontos:analysis.scoreBreakdown.liga},
+      h2h:{
+        valor:analysis.h2hGols,jogos:analysis.h2hJogos,
+        over15Rate:analysis.h2hOver15Rate,over15Total:analysis.h2hOver15Total,
+        sameVenueRate:analysis.h2hSameVenueRate,
+        pontos:analysis.scoreBreakdown.h2h
+      },
+      contexto:{
+        homeTrend:analysis.homeStats.trendUp?'↑':analysis.homeStats.trendDown?'↓':'→',
+        awayTrend:analysis.awayStats.trendUp?'↑':analysis.awayStats.trendDown?'↓':'→',
+        homeTrend5:analysis.homeStats.trend5,awayTrend5:analysis.awayStats.trend5,
+        pontos:analysis.scoreBreakdown.contexto
+      },
       forma:{homeForm:analysis.homeStats.form,awayForm:analysis.awayStats.form,pontos:analysis.scoreBreakdown.forma},
     },
     // Odd preenchida manualmente depois
@@ -615,8 +630,8 @@ async function analyzeFixture(fix){
   try{
     const homeId=fix.teams.home.id,awayId=fix.teams.away.id,leagueId=fix.league.id;
     const [homeStats,awayStats]=await Promise.all([
-      fetchTeamStatsCached(homeId),
-      fetchTeamStatsCached(awayId),
+      fetchTeamStatsCached(homeId, true),  // mandante
+      fetchTeamStatsCached(awayId, false), // visitante
     ]);
     const h2hKey=`h2h_${Math.min(homeId,awayId)}_${Math.max(homeId,awayId)}`;
     let h2hData;
@@ -628,11 +643,14 @@ async function analyzeFixture(fix){
       state.reqUsed++;
     }
     const {score,breakdown}=calculateScore(homeStats,awayStats,h2hData,leagueId);
-    const league=LEAGUES.find(l=>l.id===leagueId)||{name:fix.league.name,flag:'⚽',avgGoals:2.5};
+    const league=LEAGUES.find(l=>l.id===leagueId)||{name:fix.league.name,flag:'⚽',avgGoals:2.5,overRate:0.70};
     return{
       fixtureId:fix.fixture.id,homeTeam:fix.teams.home.name,awayTeam:fix.teams.away.name,
       time:fix.fixture.date,league,score,scoreBreakdown:breakdown,
-      homeStats,awayStats,h2hGols:h2hData.avgGoals,h2hJogos:h2hData.total,
+      homeStats,awayStats,
+      h2hGols:h2hData.avgGoals,h2hJogos:h2hData.total,
+      h2hOver15Rate:h2hData.over15Rate,h2hOver15Total:h2hData.over15Total,
+      h2hSameVenueRate:h2hData.sameVenueOver15Rate,
       fromCache:homeStats.fromCache&&awayStats.fromCache,
     };
   }catch(e){return null}
@@ -640,26 +658,37 @@ async function analyzeFixture(fix){
 
 function isCacheValid(ts){return ts&&(Date.now()-ts)<24*60*60*1000}
 
-async function fetchTeamStatsCached(teamId){
-  const key=`stats_${teamId}`;
+async function fetchTeamStatsCached(teamId, isHomeTeam){
+  const key=`stats_${teamId}_${isHomeTeam?'h':'a'}`;
   if(statsCache[key]&&isCacheValid(statsCache[key].ts))return{...statsCache[key].data,fromCache:true};
-  const stats=await fetchTeamStats(teamId);
+  const stats=await fetchTeamStats(teamId, isHomeTeam);
   statsCache[key]={data:stats,ts:Date.now()};
   state.reqUsed++;
   document.getElementById('reqCount').textContent=state.reqUsed+' / 7500';
   return{...stats,fromCache:false};
 }
 
-async function fetchTeamStats(teamId){
+async function fetchTeamStats(teamId, isHomeTeam){
   try{
     const resp=await fetch(proxyUrl(`/fixtures?team=${teamId}&last=10`));
     const data=await resp.json();
     const fixtures=data.response||[];
     if(!fixtures.length)return defaultStats();
 
+    const mediana=(arr)=>{
+      if(!arr.length)return 0;
+      const s=[...arr].sort((a,b)=>a-b);
+      const m=Math.floor(s.length/2);
+      return s.length%2!==0?s[m]:(s[m-1]+s[m])/2;
+    };
+
+    // Separar jogos em casa e fora
+    const homeFixtures=fixtures.filter(f=>String(f.teams.home.id)===String(teamId));
+    const awayFixtures=fixtures.filter(f=>String(f.teams.away.id)===String(teamId));
+
+    // Stats gerais (últimos 10)
     const goalsForArr=[],goalsAgainstArr=[];
     let wins=0,form='';
-
     fixtures.forEach(f=>{
       const isHome=String(f.teams.home.id)===String(teamId);
       const gf=isHome?(f.goals.home??0):(f.goals.away??0);
@@ -672,79 +701,150 @@ async function fetchTeamStats(teamId){
       form+=won?'W':draw?'D':'L';
     });
 
-    // Usar MEDIANA em vez de média — evita distorção por outliers como 7x0
-    const mediana=(arr)=>{
-      const s=[...arr].sort((a,b)=>a-b);
-      const m=Math.floor(s.length/2);
-      return s.length%2!==0?s[m]:(s[m-1]+s[m])/2;
-    };
+    // Stats casa/fora específicas (relevantes para o contexto do jogo)
+    const contextFixtures=isHomeTeam?homeFixtures:awayFixtures;
+    const contextGF=[],contextGA=[];
+    contextFixtures.forEach(f=>{
+      const isHome=String(f.teams.home.id)===String(teamId);
+      contextGF.push(isHome?(f.goals.home??0):(f.goals.away??0));
+      contextGA.push(isHome?(f.goals.away??0):(f.goals.home??0));
+    });
+
+    // Tendência: últimos 5 vs últimos 10
+    const last5=goalsForArr.slice(0,5); // API retorna do mais recente
+    const last10=goalsForArr;
+    const trend5=last5.length?last5.reduce((a,b)=>a+b,0)/last5.length:0;
+    const trend10=last10.length?last10.reduce((a,b)=>a+b,0)/last10.length:0;
+    const trendUp=trend5>trend10+0.3; // melhorando no ataque
+    const trendDown=trend5<trend10-0.3; // piorando no ataque
 
     const n=fixtures.length;
     return{
       goalsFor:parseFloat(mediana(goalsForArr).toFixed(2)),
       goalsAgainst:parseFloat(mediana(goalsAgainstArr).toFixed(2)),
-      // Guardar também a média para referência na auditoria
       goalsForMean:parseFloat((goalsForArr.reduce((a,b)=>a+b,0)/n).toFixed(2)),
       goalsAgainstMean:parseFloat((goalsAgainstArr.reduce((a,b)=>a+b,0)/n).toFixed(2)),
+      // Casa/fora específico
+      contextGoalsFor:contextGF.length?parseFloat(mediana(contextGF).toFixed(2)):null,
+      contextGoalsAgainst:contextGA.length?parseFloat(mediana(contextGA).toFixed(2)):null,
+      contextJogos:contextFixtures.length,
+      // Tendência
+      trendUp,trendDown,trend5:parseFloat(trend5.toFixed(2)),trend10:parseFloat(trend10.toFixed(2)),
       goalsForArr,goalsAgainstArr,
       played:n,wins,form,winRate:wins/n,
     };
   }catch(e){return defaultStats()}
 }
-function defaultStats(){return{goalsFor:0,goalsAgainst:0,goalsForMean:0,goalsAgainstMean:0,goalsForArr:[],goalsAgainstArr:[],played:0,wins:0,form:'',winRate:0}}
+function defaultStats(){return{goalsFor:0,goalsAgainst:0,goalsForMean:0,goalsAgainstMean:0,contextGoalsFor:null,contextGoalsAgainst:null,contextJogos:0,trendUp:false,trendDown:false,trend5:0,trend10:0,goalsForArr:[],goalsAgainstArr:[],played:0,wins:0,form:'',winRate:0}}
 
 async function fetchH2H(h1,h2){
   try{
     const resp=await fetch(proxyUrl(`/fixtures/headtohead?h2h=${h1}-${h2}&last=10`));
     const data=await resp.json();
     const fixtures=data.response||[];
-    if(!fixtures.length)return{avgGoals:0,total:0};
+    if(!fixtures.length)return{avgGoals:0,total:0,over15Rate:0,over15Total:0};
+
     const total=fixtures.reduce((acc,f)=>acc+(f.goals.home||0)+(f.goals.away||0),0);
-    return{avgGoals:total/fixtures.length,total:fixtures.length};
-  }catch(e){return{avgGoals:0,total:0}}
+    const over15=fixtures.filter(f=>((f.goals.home||0)+(f.goals.away||0))>1.5).length;
+
+    // H2H com mandante em casa (mesmo estádio)
+    const sameVenue=fixtures.filter(f=>String(f.teams.home.id)===String(h1));
+    const sameVenueOver15=sameVenue.filter(f=>((f.goals.home||0)+(f.goals.away||0))>1.5).length;
+
+    return{
+      avgGoals:total/fixtures.length,
+      total:fixtures.length,
+      over15Rate:over15/fixtures.length,
+      over15Total:over15,
+      sameVenueTotal:sameVenue.length,
+      sameVenueOver15Rate:sameVenue.length?sameVenueOver15/sameVenue.length:null,
+    };
+  }catch(e){return{avgGoals:0,total:0,over15Rate:0,over15Total:0,sameVenueTotal:0,sameVenueOver15Rate:null}}
 }
 
 function calcEV(score,odd){if(!odd||odd<=0)return null;return parseFloat(((score/100*odd)-1).toFixed(3))}
+
 function calculateScore(home,away,h2h,leagueId){
   const league=LEAGUES.find(l=>l.id===leagueId);
   const leagueAvg=league?.avgGoals||2.5;
-  let breakdown={ataque:0,defesa:0,liga:0,h2h:0,forma:0};
+  const leagueOverRate=league?.overRate||0.70;
 
-  // Ataque combinado (30%)
-  const avgGoals=(home.goalsFor+away.goalsFor)/2;
-  if(avgGoals>=2.5)breakdown.ataque=30;
-  else if(avgGoals>=2.0)breakdown.ataque=22;
-  else if(avgGoals>=1.5)breakdown.ataque=14;
-  else if(avgGoals>0)breakdown.ataque=5;
-  else breakdown.ataque=0;
+  let breakdown={
+    defesa:0,   // 30% — maior correlação real com OVER
+    liga:0,     // 20% — liga é determinante (Premier vs Libertadores)
+    h2h:0,      // 20% — % over 1.5 no H2H é mais direto
+    ataque:0,   // 15% — correlação real baixa mas ainda relevante
+    contexto:0, // 10% — casa/fora + tendência (novo)
+    forma:0,    // 5%  — correlação quase zero nos dados
+  };
 
-  // Bônus liga (10%)
-  if(leagueAvg>=3.0)breakdown.liga=10;
-  else if(leagueAvg>=2.7)breakdown.liga=7;
-  else if(leagueAvg>=2.5)breakdown.liga=4;
-  else breakdown.liga=1;
-
-  // Defesas fracas (25%)
-  const avgDef=(home.goalsAgainst+away.goalsAgainst)/2;
-  if(avgDef>=1.5)breakdown.defesa=25;
-  else if(avgDef>=1.2)breakdown.defesa=18;
-  else if(avgDef>=0.9)breakdown.defesa=10;
+  // === DEFESA (30%) ===
+  // Usar contexto casa/fora quando disponível
+  const homeDefCtx=home.contextGoalsAgainst!==null?home.contextGoalsAgainst:home.goalsAgainst;
+  const awayDefCtx=away.contextGoalsAgainst!==null?away.contextGoalsAgainst:away.goalsAgainst;
+  const avgDef=(homeDefCtx+awayDefCtx)/2;
+  if(avgDef>=1.8)breakdown.defesa=30;
+  else if(avgDef>=1.5)breakdown.defesa=24;
+  else if(avgDef>=1.2)breakdown.defesa=16;
+  else if(avgDef>=0.9)breakdown.defesa=8;
   else if(avgDef>0)breakdown.defesa=3;
   else breakdown.defesa=0;
 
-  // H2H (20%)
-  if(h2h.total>=3){
-    if(h2h.avgGoals>=3.0)breakdown.h2h=20;
-    else if(h2h.avgGoals>=2.0)breakdown.h2h=15;
-    else if(h2h.avgGoals>=1.5)breakdown.h2h=8;
-    else breakdown.h2h=3;
-  } else breakdown.h2h=10;
+  // === LIGA (20%) ===
+  // Combinação de média de gols e taxa histórica de over 1.5 da liga
+  if(leagueOverRate>=0.88)breakdown.liga=20;
+  else if(leagueOverRate>=0.82)breakdown.liga=16;
+  else if(leagueOverRate>=0.76)breakdown.liga=12;
+  else if(leagueOverRate>=0.72)breakdown.liga=8;
+  else breakdown.liga=4;
 
-  // Forma (15%)
-  const form=(countWins(home.form)+countWins(away.form))/2;
-  if(form>=0.6)breakdown.forma=15;
-  else if(form>=0.4)breakdown.forma=10;
-  else breakdown.forma=4;
+  // === H2H (20%) — % over 1.5 é mais direto que média de gols ===
+  if(h2h.total>=5){
+    // Temos dados suficientes — usar taxa de over 1.5
+    const rate=h2h.over15Rate||0;
+    // Bônus se mesmo estádio confirmar tendência
+    const sameVenueBonus=(h2h.sameVenueOver15Rate!==null&&h2h.sameVenueTotal>=3&&h2h.sameVenueOver15Rate>=0.7)?2:0;
+    if(rate>=0.80)breakdown.h2h=20+sameVenueBonus;
+    else if(rate>=0.60)breakdown.h2h=15+sameVenueBonus;
+    else if(rate>=0.40)breakdown.h2h=8;
+    else breakdown.h2h=3;
+    breakdown.h2h=Math.min(breakdown.h2h,20);
+  } else if(h2h.total>=2){
+    // Poucos dados — usar média de gols como proxy
+    if(h2h.avgGoals>=3.0)breakdown.h2h=14;
+    else if(h2h.avgGoals>=2.0)breakdown.h2h=10;
+    else breakdown.h2h=6;
+  } else {
+    breakdown.h2h=10; // neutro sem dados
+  }
+
+  // === ATAQUE (15%) ===
+  // Usar contexto casa/fora quando disponível
+  const homeAtkCtx=home.contextGoalsFor!==null?home.contextGoalsFor:home.goalsFor;
+  const awayAtkCtx=away.contextGoalsFor!==null?away.contextGoalsFor:away.goalsFor;
+  const avgGoals=(homeAtkCtx+awayAtkCtx)/2;
+  if(avgGoals>=2.5)breakdown.ataque=15;
+  else if(avgGoals>=2.0)breakdown.ataque=12;
+  else if(avgGoals>=1.5)breakdown.ataque=8;
+  else if(avgGoals>=1.0)breakdown.ataque=4;
+  else if(avgGoals>0)breakdown.ataque=2;
+  else breakdown.ataque=0;
+
+  // === CONTEXTO CASA/FORA + TENDÊNCIA (10%) ===
+  let ctx=5; // base neutra
+  // Bônus por dados de casa/fora disponíveis
+  if(home.contextJogos>=3&&away.contextJogos>=3) ctx+=2;
+  // Tendência de ataque crescente
+  if(home.trendUp||away.trendUp) ctx+=2;
+  // Penalidade por tendência decrescente em ambos
+  if(home.trendDown&&away.trendDown) ctx-=3;
+  breakdown.contexto=Math.max(0,Math.min(ctx,10));
+
+  // === FORMA (5%) — peso reduzido pela baixa correlação ===
+  const formScore=(countWins(home.form)+countWins(away.form))/2;
+  if(formScore>=0.6)breakdown.forma=5;
+  else if(formScore>=0.4)breakdown.forma=3;
+  else breakdown.forma=1;
 
   const score=Math.min(Math.round(Object.values(breakdown).reduce((a,b)=>a+b,0)),100);
   return{score,breakdown};
@@ -790,33 +890,44 @@ function renderMatchCard(j,rec){
 
   const breakdownHtml=`
     <div class="score-breakdown">
-      <div class="breakdown-title">Fatores da Análise (mediana dos últimos 10 jogos)</div>
+      <div class="breakdown-title">Fatores da Análise (novos pesos calibrados)</div>
       <div class="breakdown-row">
-        <span class="breakdown-label">⚽ Ataque (30%)</span>
-        <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.ataque/30)*100}%"></div></div>
-        <span class="breakdown-value" style="color:var(--accent)">${bd.ataque}/30</span>
+        <span class="breakdown-label">🛡 Defesa (30%)</span>
+        <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.defesa/30)*100}%"></div></div>
+        <span class="breakdown-value" style="color:var(--accent2)">${bd.defesa}/30</span>
       </div>
       <div class="breakdown-row">
-        <span class="breakdown-label">🛡 Defesa (25%)</span>
-        <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.defesa/25)*100}%"></div></div>
-        <span class="breakdown-value" style="color:var(--accent2)">${bd.defesa}/25</span>
+        <span class="breakdown-label">🏆 Liga (20%)</span>
+        <div class="breakdown-bar"><div class="breakdown-fill fill-med" style="width:${(bd.liga/20)*100}%"></div></div>
+        <span class="breakdown-value" style="color:var(--warning)">${bd.liga}/20</span>
       </div>
       <div class="breakdown-row">
-        <span class="breakdown-label">🏆 Liga (10%)</span>
-        <div class="breakdown-bar"><div class="breakdown-fill fill-med" style="width:${(bd.liga/10)*100}%"></div></div>
-        <span class="breakdown-value" style="color:var(--warning)">${bd.liga}/10</span>
-      </div>
-      <div class="breakdown-row">
-        <span class="breakdown-label">⚔ H2H (20%)</span>
+        <span class="breakdown-label">⚔ H2H Over% (20%)</span>
         <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.h2h/20)*100}%"></div></div>
         <span class="breakdown-value" style="color:var(--accent)">${bd.h2h}/20</span>
       </div>
       <div class="breakdown-row">
-        <span class="breakdown-label">📈 Forma (15%)</span>
-        <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.forma/15)*100}%"></div></div>
-        <span class="breakdown-value" style="color:var(--accent)">${bd.forma}/15</span>
+        <span class="breakdown-label">⚽ Ataque (15%)</span>
+        <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.ataque/15)*100}%"></div></div>
+        <span class="breakdown-value" style="color:var(--accent)">${bd.ataque}/15</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="breakdown-label">🏠 Casa/Fora+Tend (10%)</span>
+        <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.contexto/10)*100}%"></div></div>
+        <span class="breakdown-value" style="color:var(--accent3)">${bd.contexto}/10</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="breakdown-label">📈 Forma (5%)</span>
+        <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.forma/5)*100}%"></div></div>
+        <span class="breakdown-value" style="color:var(--muted)">${bd.forma}/5</span>
       </div>
     </div>`;
+
+  const homeTrend=j.homeStats.trendUp?'↑🔥':j.homeStats.trendDown?'↓📉':'→';
+  const awayTrend=j.awayStats.trendUp?'↑🔥':j.awayStats.trendDown?'↓📉':'→';
+  const homeCtx=j.homeStats.contextGoalsFor!==null?` casa:${j.homeStats.contextGoalsFor}`:'';
+  const awayCtx=j.awayStats.contextGoalsFor!==null?` fora:${j.awayStats.contextGoalsFor}`:'';
+  const h2hOverStr=j.h2hOver15Total>0?` · ${Math.round(j.h2hOver15Rate*100)}% over`:'';
 
   return `<div class="match-card ${confClass}">
     <div class="match-header">
@@ -826,12 +937,12 @@ function renderMatchCard(j,rec){
     <div class="match-teams">
       <div class="team">
         <div class="team-name">${j.homeTeam}</div>
-        <div class="team-avg">⚽ ${j.homeStats.goalsFor} med. · ${j.homeStats.goalsForMean} méd. · ${j.homeStats.form||'—'}</div>
+        <div class="team-avg">⚽ ${j.homeStats.goalsFor}${homeCtx} ${homeTrend} · ${j.homeStats.form||'—'}</div>
       </div>
       <div class="vs">VS</div>
       <div class="team away">
         <div class="team-name">${j.awayTeam}</div>
-        <div class="team-avg">${j.awayStats.goalsFor} med. · ${j.awayStats.goalsForMean} méd. · ${j.awayStats.form||'—'} ⚽</div>
+        <div class="team-avg">${j.awayStats.goalsFor}${awayCtx} ${awayTrend} · ${j.awayStats.form||'—'} ⚽</div>
       </div>
     </div>
     ${outlierWarning}
