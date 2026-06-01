@@ -335,20 +335,35 @@
 <script>
 // ===================== LEAGUES =====================
 const LEAGUES=[
-  {id:39, name:'Premier League',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',country:'Inglaterra',avgGoals:2.93,overRate:0.90},
-  {id:140,name:'La Liga',flag:'🇪🇸',country:'Espanha',avgGoals:2.62,overRate:0.75},
-  {id:135,name:'Serie A',flag:'🇮🇹',country:'Itália',avgGoals:2.56,overRate:0.72},
-  {id:78, name:'Bundesliga',flag:'🇩🇪',country:'Alemanha',avgGoals:3.14,overRate:0.85},
-  {id:61, name:'Ligue 1',flag:'🇫🇷',country:'França',avgGoals:2.96,overRate:0.78},
-  {id:88, name:'Eredivisie',flag:'🇳🇱',country:'Holanda',avgGoals:3.09,overRate:0.83},
-  {id:119,name:'Superliga',flag:'🇩🇰',country:'Dinamarca',avgGoals:3.14,overRate:0.83},
-  {id:71, name:'Brasileirão',flag:'🇧🇷',country:'Brasil',avgGoals:2.50,overRate:0.72},
-  {id:307,name:'Saudi Pro League',flag:'🇸🇦',country:'Arábia Saudita',avgGoals:3.10,overRate:0.80},
-  {id:253,name:'MLS',flag:'🇺🇸',country:'EUA',avgGoals:3.12,overRate:0.82},
-  {id:2,  name:'Champions League',flag:'🏆',country:'Europa',avgGoals:3.26,overRate:0.85},
-  {id:3,  name:'Europa League',flag:'🥈',country:'Europa',avgGoals:2.90,overRate:0.78},
-  // Libertadores REMOVIDA — 41.7% de over nos dados reais, abaixo do acaso
-  {id:11, name:'Sul-Americana',flag:'🌎',country:'América do Sul',avgGoals:2.38,overRate:0.74},
+  // === EUROPA ===
+  {id:39, name:'Premier League',    flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',country:'Inglaterra',  avgGoals:2.93,overRate:0.90},
+  {id:78, name:'Bundesliga',        flag:'🇩🇪',country:'Alemanha',    avgGoals:3.14,overRate:0.85},
+  {id:88, name:'Eredivisie',        flag:'🇳🇱',country:'Holanda',     avgGoals:3.09,overRate:0.83},
+  {id:119,name:'Superliga',         flag:'🇩🇰',country:'Dinamarca',   avgGoals:3.14,overRate:0.83},
+  {id:61, name:'Ligue 1',           flag:'🇫🇷',country:'França',      avgGoals:2.96,overRate:0.78},
+  {id:135,name:'Serie A',           flag:'🇮🇹',country:'Itália',      avgGoals:2.56,overRate:0.72},
+  {id:140,name:'La Liga',           flag:'🇪🇸',country:'Espanha',     avgGoals:2.62,overRate:0.75},
+  {id:179,name:'Scottish Premiership',flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿',country:'Escócia',  avgGoals:2.74,overRate:0.76},
+  {id:94, name:'Primeira Liga',     flag:'🇵🇹',country:'Portugal',    avgGoals:2.69,overRate:0.75},
+  {id:144,name:'Pro League',        flag:'🇧🇪',country:'Bélgica',     avgGoals:2.68,overRate:0.74},
+  {id:218,name:'Bundesliga',        flag:'🇦🇹',country:'Áustria',     avgGoals:2.64,overRate:0.73},
+  // === COMPETIÇÕES UEFA ===
+  {id:2,  name:'Champions League',  flag:'🏆',country:'Europa',       avgGoals:3.26,overRate:0.85},
+  {id:3,  name:'Europa League',     flag:'🥈',country:'Europa',       avgGoals:2.90,overRate:0.78},
+  // === AMÉRICAS ===
+  {id:253,name:'MLS',               flag:'🇺🇸',country:'EUA',         avgGoals:3.12,overRate:0.82},
+  {id:262,name:'Liga MX',           flag:'🇲🇽',country:'México',      avgGoals:2.91,overRate:0.79},
+  {id:71, name:'Brasileirão',       flag:'🇧🇷',country:'Brasil',      avgGoals:2.50,overRate:0.72},
+  {id:239,name:'Liga 1',            flag:'🇵🇪',country:'Peru',        avgGoals:2.70,overRate:0.74},
+  {id:11, name:'Sul-Americana',     flag:'🌎',country:'América do Sul',avgGoals:2.38,overRate:0.74},
+  // === ÁSIA / ORIENTE MÉDIO ===
+  {id:307,name:'Saudi Pro League',  flag:'🇸🇦',country:'Arábia Saudita',avgGoals:3.10,overRate:0.80},
+  {id:98, name:'J1 League',         flag:'🇯🇵',country:'Japão',       avgGoals:2.64,overRate:0.73},
+  // === COPA DO MUNDO ===
+  // Critérios especiais: H2H muito limitado, seleções raramente se enfrentam
+  // Média histórica: 2.5 gols/jogo, over 1.5 em ~68% dos jogos nos últimos 5 Mundiais
+  {id:1,  name:'Copa do Mundo',     flag:'🌍',country:'Mundial',      avgGoals:2.50,overRate:0.68,worldCup:true},
+  // Libertadores REMOVIDA — apenas 41.7% de over nos dados reais
 ];
 const LEAGUE_IDS=LEAGUES.map(l=>l.id);
 const PROXY='https://dry-resonance-53bd.rildo-fraga.workers.dev';
@@ -768,6 +783,47 @@ function calculateScore(home,away,h2h,leagueId){
   const league=LEAGUES.find(l=>l.id===leagueId);
   const leagueAvg=league?.avgGoals||2.5;
   const leagueOverRate=league?.overRate||0.70;
+
+  // === COPA DO MUNDO — lógica especial ===
+  // Seleções raramente se enfrentam → H2H quase sempre vazio ou de torneios antigos
+  // Critério principal: qualidade do ataque das seleções + fase do torneio
+  if(league?.worldCup){
+    let wcScore=0;
+    // Ataque das seleções (40%) — mais peso porque é o principal diferencial
+    const avgGoals2=(home.goalsFor+away.goalsFor)/2;
+    if(avgGoals2>=2.0)wcScore+=40;
+    else if(avgGoals2>=1.5)wcScore+=30;
+    else if(avgGoals2>=1.0)wcScore+=18;
+    else wcScore+=8;
+    // Defesa (25%)
+    const avgDef2=(home.goalsAgainst+away.goalsAgainst)/2;
+    if(avgDef2>=1.5)wcScore+=25;
+    else if(avgDef2>=1.0)wcScore+=18;
+    else if(avgDef2>=0.7)wcScore+=10;
+    else wcScore+=4;
+    // H2H Copa do Mundo especificamente (20%) — pouco dado mas valioso
+    if(h2h.total>=2){
+      if(h2h.over15Rate>=0.7)wcScore+=20;
+      else if(h2h.over15Rate>=0.5)wcScore+=14;
+      else wcScore+=6;
+    } else {
+      wcScore+=10; // neutro sem dados
+    }
+    // Forma recente (15%)
+    const formWC=(countWins(home.form)+countWins(away.form))/2;
+    if(formWC>=0.6)wcScore+=15;
+    else if(formWC>=0.4)wcScore+=10;
+    else wcScore+=4;
+    const scoreWC=Math.min(Math.round(wcScore),100);
+    // Breakdown simplificado para exibição
+    const breakdownWC={
+      defesa:Math.round(wcScore*0.25),
+      liga:0,h2h:Math.round(wcScore*0.20),
+      ataque:Math.round(wcScore*0.40),
+      contexto:0,forma:Math.round(wcScore*0.15)
+    };
+    return{score:scoreWC,breakdown:breakdownWC};
+  }
 
   let breakdown={
     defesa:0,   // 30% — maior correlação real com OVER
