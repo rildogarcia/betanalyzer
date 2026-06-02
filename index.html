@@ -785,42 +785,41 @@ function calculateScore(home,away,h2h,leagueId){
   const leagueOverRate=league?.overRate||0.70;
 
   // === COPA DO MUNDO — lógica especial ===
-  // Seleções raramente se enfrentam → H2H quase sempre vazio ou de torneios antigos
-  // Critério principal: qualidade do ataque das seleções + fase do torneio
+  // H2H IGNORADO — confrontos históricos entre seleções são irrelevantes
+  // (elencos completamente diferentes a cada edição, jogos de décadas atrás)
+  // Foco total em: ataque atual + defesa atual + forma recente
   if(league?.worldCup){
     let wcScore=0;
-    // Ataque das seleções (40%) — mais peso porque é o principal diferencial
+
+    // ATAQUE (45%) — principal diferencial entre seleções na Copa
     const avgGoals2=(home.goalsFor+away.goalsFor)/2;
-    if(avgGoals2>=2.0)wcScore+=40;
-    else if(avgGoals2>=1.5)wcScore+=30;
-    else if(avgGoals2>=1.0)wcScore+=18;
+    if(avgGoals2>=2.0)wcScore+=45;
+    else if(avgGoals2>=1.5)wcScore+=34;
+    else if(avgGoals2>=1.0)wcScore+=20;
     else wcScore+=8;
-    // Defesa (25%)
+
+    // DEFESA (30%) — qualidade defensiva atual das seleções
     const avgDef2=(home.goalsAgainst+away.goalsAgainst)/2;
-    if(avgDef2>=1.5)wcScore+=25;
-    else if(avgDef2>=1.0)wcScore+=18;
-    else if(avgDef2>=0.7)wcScore+=10;
+    if(avgDef2>=1.5)wcScore+=30;
+    else if(avgDef2>=1.0)wcScore+=22;
+    else if(avgDef2>=0.7)wcScore+=12;
     else wcScore+=4;
-    // H2H Copa do Mundo especificamente (20%) — pouco dado mas valioso
-    if(h2h.total>=2){
-      if(h2h.over15Rate>=0.7)wcScore+=20;
-      else if(h2h.over15Rate>=0.5)wcScore+=14;
-      else wcScore+=6;
-    } else {
-      wcScore+=10; // neutro sem dados
-    }
-    // Forma recente (15%)
+
+    // FORMA RECENTE (20%) — momento atual da seleção (eliminatórias + amistosos)
     const formWC=(countWins(home.form)+countWins(away.form))/2;
-    if(formWC>=0.6)wcScore+=15;
-    else if(formWC>=0.4)wcScore+=10;
-    else wcScore+=4;
+    if(formWC>=0.6)wcScore+=20;
+    else if(formWC>=0.4)wcScore+=14;
+    else wcScore+=5;
+
+    // BASE NEUTRA (5%) — incerteza inerente à Copa do Mundo
+    wcScore+=5;
+
     const scoreWC=Math.min(Math.round(wcScore),100);
-    // Breakdown simplificado para exibição
     const breakdownWC={
-      defesa:Math.round(wcScore*0.25),
-      liga:0,h2h:Math.round(wcScore*0.20),
-      ataque:Math.round(wcScore*0.40),
-      contexto:0,forma:Math.round(wcScore*0.15)
+      ataque:Math.round(wcScore*0.45),
+      defesa:Math.round(wcScore*0.30),
+      forma:Math.round(wcScore*0.20),
+      liga:5,h2h:0,contexto:0
     };
     return{score:scoreWC,breakdown:breakdownWC};
   }
@@ -944,9 +943,33 @@ function renderMatchCard(j,rec){
   const awayOutlier=Math.abs(j.awayStats.goalsForMean-j.awayStats.goalsFor)>1;
   const outlierWarning=(homeOutlier||awayOutlier)?`<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:6px 10px;font-size:10px;color:var(--warning);margin-bottom:8px">⚠️ Outlier detectado — ${homeOutlier?j.homeTeam:j.awayTeam} tem uma partida atípica nos últimos 10 jogos. Mediana usada no cálculo.</div>`:'';
 
-  const breakdownHtml=`
+  const isWorldCup=j.league?.worldCup||false;
+  const breakdownHtml=isWorldCup?`
     <div class="score-breakdown">
-      <div class="breakdown-title">Fatores da Análise (novos pesos calibrados)</div>
+      <div class="breakdown-title">🌍 Copa do Mundo — H2H ignorado (irrelevante)</div>
+      <div class="breakdown-row">
+        <span class="breakdown-label">⚽ Ataque (45%)</span>
+        <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.ataque/45)*100}%"></div></div>
+        <span class="breakdown-value" style="color:var(--accent)">${bd.ataque}/45</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="breakdown-label">🛡 Defesa (30%)</span>
+        <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.defesa/30)*100}%"></div></div>
+        <span class="breakdown-value" style="color:var(--accent2)">${bd.defesa}/30</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="breakdown-label">📈 Forma (20%)</span>
+        <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.forma/20)*100}%"></div></div>
+        <span class="breakdown-value" style="color:var(--accent)">${bd.forma}/20</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="breakdown-label">⚙️ Base neutra (5%)</span>
+        <div class="breakdown-bar"><div class="breakdown-fill fill-med" style="width:100%"></div></div>
+        <span class="breakdown-value" style="color:var(--muted)">5/5</span>
+      </div>
+    </div>`:`
+    <div class="score-breakdown">
+      <div class="breakdown-title">Fatores da Análise (pesos calibrados)</div>
       <div class="breakdown-row">
         <span class="breakdown-label">🛡 Defesa (30%)</span>
         <div class="breakdown-bar"><div class="breakdown-fill fill-high" style="width:${(bd.defesa/30)*100}%"></div></div>
