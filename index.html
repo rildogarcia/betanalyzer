@@ -213,6 +213,7 @@
     <button class="tab" onclick="showPage('auditoria',this)">📋 Audit.</button>
     <button class="tab" onclick="showPage('resultados',this)">📊 Result.</button>
     <button class="tab" onclick="showPage('calibracao',this)">🎯 Calib.</button>
+    <button class="tab" onclick="showPage('modelo',this)">🧠 IA</button>
     <button class="tab" onclick="showPage('config',this)">⚙️</button>
   </div>
 </div>
@@ -262,6 +263,11 @@
   <!-- CALIBRACAO -->
   <div id="page-calibracao" class="page">
     <div id="calibracaoContent"></div>
+  </div>
+
+  <!-- MODELO IA -->
+  <div id="page-modelo" class="page">
+    <div id="modeloContent"></div>
   </div>
 
   <!-- CONFIG -->
@@ -372,10 +378,23 @@ const PROXY='https://dry-resonance-53bd.rildo-fraga.workers.dev';
 let state={
   apiFootball:'',
   config:{oddMin:1.30,oddMax:1.50,scoreMin:41},
-  selectedDate:'amanha', // padrão é amanhã — análise noturna
+  selectedDate:'amanha',
   selectedBet:null,
   reqUsed:0,
   jogosHistorico:[],
+  // Pesos adaptativos — começam com os valores calibrados pelos dados reais
+  // e evoluem automaticamente com cada resultado
+  pesosAdaptativos:{
+    defesa:30, liga:20, h2h:20, ataque:15, contexto:10, forma:5,
+    // Histórico de evolução dos pesos
+    historico:[],
+    // Correlações acumuladas por fator
+    correlacoes:{defesa:0,liga:0,h2h:0,ataque:0,contexto:0,forma:0},
+    // Total de ajustes feitos
+    ajustes:0,
+    // Confiança do modelo (0-100%)
+    confianca:0,
+  },
 };
 let statsCache={};
 
@@ -399,15 +418,27 @@ loadState();loadCache();
 
 // Migração segura — corrige dados sem perder histórico
 try{
-  if(!state.config)state.config={oddMin:1.30,oddMax:1.50,scoreMin:50};
+  if(!state.config)state.config={oddMin:1.30,oddMax:1.50,scoreMin:41};
   if(!state.config.oddMin)state.config.oddMin=1.30;
   if(!state.config.oddMax)state.config.oddMax=1.50;
-  if(!state.config.scoreMin)state.config.scoreMin=50;
+  if(!state.config.scoreMin)state.config.scoreMin=41;
   if(!Array.isArray(state.jogosHistorico))state.jogosHistorico=[];
   if(!state.selectedDate)state.selectedDate='amanha';
   if(typeof state.reqUsed!=='number')state.reqUsed=0;
+  // Inicializar pesos adaptativos se não existirem
+  if(!state.pesosAdaptativos){
+    state.pesosAdaptativos={
+      defesa:30,liga:20,h2h:20,ataque:15,contexto:10,forma:5,
+      historico:[],correlacoes:{defesa:0,liga:0,h2h:0,ataque:0,contexto:0,forma:0},
+      ajustes:0,confianca:0,
+    };
+  }
+  if(!state.pesosAdaptativos.correlacoes){
+    state.pesosAdaptativos.correlacoes={defesa:0,liga:0,h2h:0,ataque:0,contexto:0,forma:0};
+  }
+  if(!state.pesosAdaptativos.historico)state.pesosAdaptativos.historico=[];
   saveState();
-}catch(e){console.warn('Migração:', e);}
+}catch(e){console.warn('Migração:',e);}
 
 window.addEventListener('load',()=>{
   try{
@@ -421,6 +452,8 @@ window.addEventListener('load',()=>{
       document.getElementById('apiStatus').textContent='✅ API Ok';
       document.getElementById('btnAmanha').classList.add('active');
       document.getElementById('btnHoje').classList.remove('active');
+      // Reprocessar aprendizado com dados existentes
+      setTimeout(()=>reprocessarAprendizado(),500);
       loadJogos();
       setTimeout(()=>buscarResultadosPendentes(),3000);
     }
@@ -779,6 +812,98 @@ async function fetchH2H(h1,h2){
 
 function calcEV(score,odd){if(!odd||odd<=0)return null;return parseFloat(((score/100*odd)-1).toFixed(3))}
 
+// ===================== MOTOR DE APRENDIZADO ADAPTATIVO =====================
+function getPesosAtivos(){
+  const p=state.pesosAdaptativos;
+  return{defesa:p.defesa,liga:p.liga,h2h:p.h2h,ataque:p.ataque,contexto:p.contexto,forma:p.forma};
+}
+
+function aprenderComResultado(jogo){
+  if(!jogo.fatores||!jogo.resultado)return;
+  const acertou=jogo.resultado==='over';
+  const f=jogo.fatores;
+  const p=state.pesosAdaptativos;
+
+  // Normalizar pontuação de cada fator (0 a 1)
+  const fatores={
+    defesa:  (f.defesa?.pontos||0)/30,
+    liga:    (f.liga?.pontos||0)/20,
+    h2h:     (f.h2h?.pontos||0)/20,
+    ataque:  (f.ataque?.pontos||0)/15,
+    contexto:(f.contexto?.pontos||0)/10,
+    forma:   (f.forma?.pontos||0)/5,
+  };
+
+  // Taxa de aprendizado conservadora para estabilidade
+  const alpha=0.08;
+  Object.keys(fatores).forEach(k=>{
+    const alto=fatores[k]>0.65;
+    let sinal=0;
+    if(acertou&&alto)sinal=1;       // fator alto + acerto = fator é preditivo
+    else if(!acertou&&alto)sinal=-1; // fator alto + erro = fator estava "mentindo"
+    p.correlacoes[k]=(1-alpha)*p.correlacoes[k]+alpha*sinal;
+  });
+
+  p.ajustes++;
+  if(p.ajustes>=10)recalcularPesos();
+
+  // Registrar evolução (manter últimos 30)
+  if(p.historico.length===0||p.ajustes%5===0){
+    p.historico.unshift({
+      data:new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}),
+      ajuste:p.ajustes,
+      pesos:{...getPesosAtivos()},
+      correlacoes:Object.fromEntries(Object.entries(p.correlacoes).map(([k,v])=>[k,parseFloat(v.toFixed(3))])),
+    });
+    if(p.historico.length>30)p.historico=p.historico.slice(0,30);
+  }
+
+  // Confiança cresce com volume de dados
+  const totalResultados=state.jogosHistorico.filter(j=>j.resultado!==null).length;
+  p.confianca=Math.min(Math.round((totalResultados/80)*100),100);
+  saveState();
+}
+
+function recalcularPesos(){
+  const p=state.pesosAdaptativos;
+  const c=p.correlacoes;
+  const pesosBase={defesa:30,liga:20,h2h:20,ataque:15,contexto:10,forma:5};
+  const maxAjuste=12; // máximo de ±12pts por fator
+
+  const novosPesos={};
+  Object.keys(pesosBase).forEach(k=>{
+    novosPesos[k]=Math.max(1,Math.round(pesosBase[k]+c[k]*maxAjuste));
+  });
+
+  // Normalizar para 100
+  const soma=Object.values(novosPesos).reduce((a,b)=>a+b,0);
+  Object.keys(novosPesos).forEach(k=>{p[k]=Math.max(1,Math.round((novosPesos[k]/soma)*100))});
+
+  // Garantir soma = 100
+  const diff=100-Object.keys(pesosBase).reduce((a,k)=>a+p[k],0);
+  if(diff!==0){
+    const maior=Object.keys(pesosBase).sort((a,b)=>p[b]-p[a])[0];
+    p[maior]+=diff;
+  }
+}
+
+function reprocessarAprendizado(){
+  // Usa TODOS os jogos com resultado — recomendados e não recomendados
+  // Quanto mais dados, mais preciso o aprendizado
+  const comResultado=state.jogosHistorico.filter(j=>j.resultado!==null&&j.fatores);
+  if(comResultado.length<5)return;
+
+  // Reset completo das correlações
+  state.pesosAdaptativos.correlacoes={defesa:0,liga:0,h2h:0,ataque:0,contexto:0,forma:0};
+  state.pesosAdaptativos.ajustes=0;
+  state.pesosAdaptativos.historico=[];
+
+  // Reprocessar em ordem cronológica (do mais antigo ao mais recente)
+  [...comResultado].reverse().forEach(j=>aprenderComResultado(j));
+
+  console.log(`🧠 Reprocessado: ${comResultado.length} jogos (${comResultado.filter(j=>j.recomendado).length} recomendados + ${comResultado.filter(j=>!j.recomendado).length} não recomendados)`);
+}
+
 function calculateScore(home,away,h2h,leagueId){
   const league=LEAGUES.find(l=>l.id===leagueId);
   const leagueAvg=league?.avgGoals||2.5;
@@ -824,85 +949,61 @@ function calculateScore(home,away,h2h,leagueId){
     return{score:scoreWC,breakdown:breakdownWC};
   }
 
-  let breakdown={
-    defesa:0,   // 30% — maior correlação real com OVER
-    liga:0,     // 20% — liga é determinante (Premier vs Libertadores)
-    h2h:0,      // 20% — % over 1.5 no H2H é mais direto
-    ataque:0,   // 15% — correlação real baixa mas ainda relevante
-    contexto:0, // 10% — casa/fora + tendência (novo)
-    forma:0,    // 5%  — correlação quase zero nos dados
+  let breakdown={defesa:0,liga:0,h2h:0,ataque:0,contexto:0,forma:0};
+
+  // Pesos ativos — adaptativos quando há dados suficientes, fixos no início
+  const pesos=getPesosAtivos();
+  const W={
+    defesa:pesos.defesa,liga:pesos.liga,h2h:pesos.h2h,
+    ataque:pesos.ataque,contexto:pesos.contexto,forma:pesos.forma,
   };
 
-  // === DEFESA (30%) ===
-  // Usar contexto casa/fora quando disponível
+  // === DEFESA ===
   const homeDefCtx=home.contextGoalsAgainst!==null?home.contextGoalsAgainst:home.goalsAgainst;
   const awayDefCtx=away.contextGoalsAgainst!==null?away.contextGoalsAgainst:away.goalsAgainst;
   const avgDef=(homeDefCtx+awayDefCtx)/2;
-  if(avgDef>=1.8)breakdown.defesa=30;
-  else if(avgDef>=1.5)breakdown.defesa=24;
-  else if(avgDef>=1.2)breakdown.defesa=16;
-  else if(avgDef>=0.9)breakdown.defesa=8;
-  else if(avgDef>0)breakdown.defesa=3;
-  else breakdown.defesa=0;
+  const defRatio=avgDef>=1.8?1.0:avgDef>=1.5?0.80:avgDef>=1.2?0.53:avgDef>=0.9?0.27:avgDef>0?0.10:0;
+  breakdown.defesa=Math.round(W.defesa*defRatio);
 
-  // === LIGA (20%) ===
-  // Combinação de média de gols e taxa histórica de over 1.5 da liga
-  if(leagueOverRate>=0.88)breakdown.liga=20;
-  else if(leagueOverRate>=0.82)breakdown.liga=16;
-  else if(leagueOverRate>=0.76)breakdown.liga=12;
-  else if(leagueOverRate>=0.72)breakdown.liga=8;
-  else breakdown.liga=4;
+  // === LIGA ===
+  const ligaRatio=leagueOverRate>=0.88?1.0:leagueOverRate>=0.82?0.80:leagueOverRate>=0.76?0.60:leagueOverRate>=0.72?0.40:0.20;
+  breakdown.liga=Math.round(W.liga*ligaRatio);
 
-  // === H2H (20%) — % over 1.5 é mais direto que média de gols ===
+  // === H2H ===
   if(h2h.total>=5){
-    // Temos dados suficientes — usar taxa de over 1.5
     const rate=h2h.over15Rate||0;
-    // Bônus se mesmo estádio confirmar tendência
     const sameVenueBonus=(h2h.sameVenueOver15Rate!==null&&h2h.sameVenueTotal>=3&&h2h.sameVenueOver15Rate>=0.7)?2:0;
-    if(rate>=0.80)breakdown.h2h=20+sameVenueBonus;
-    else if(rate>=0.60)breakdown.h2h=15+sameVenueBonus;
-    else if(rate>=0.40)breakdown.h2h=8;
-    else breakdown.h2h=3;
-    breakdown.h2h=Math.min(breakdown.h2h,20);
+    const h2hRatio=rate>=0.80?1.0:rate>=0.60?0.75:rate>=0.40?0.40:0.15;
+    breakdown.h2h=Math.min(Math.round(W.h2h*h2hRatio)+sameVenueBonus,W.h2h);
+    breakdown.h2h=Math.min(breakdown.h2h,W.h2h);
   } else if(h2h.total>=2){
-    // Poucos dados — usar média de gols como proxy
-    if(h2h.avgGoals>=3.0)breakdown.h2h=14;
-    else if(h2h.avgGoals>=2.0)breakdown.h2h=10;
-    else breakdown.h2h=6;
+    const h2hRatio2=h2h.avgGoals>=3.0?0.70:h2h.avgGoals>=2.0?0.50:0.30;
+    breakdown.h2h=Math.round(W.h2h*h2hRatio2);
   } else {
-    breakdown.h2h=10; // neutro sem dados
+    breakdown.h2h=Math.round(W.h2h*0.50); // neutro sem dados
   }
 
-  // === ATAQUE (15%) ===
-  // Usar contexto casa/fora quando disponível
+  // === ATAQUE ===
   const homeAtkCtx=home.contextGoalsFor!==null?home.contextGoalsFor:home.goalsFor;
   const awayAtkCtx=away.contextGoalsFor!==null?away.contextGoalsFor:away.goalsFor;
   const avgGoals=(homeAtkCtx+awayAtkCtx)/2;
-  if(avgGoals>=2.5)breakdown.ataque=15;
-  else if(avgGoals>=2.0)breakdown.ataque=12;
-  else if(avgGoals>=1.5)breakdown.ataque=8;
-  else if(avgGoals>=1.0)breakdown.ataque=4;
-  else if(avgGoals>0)breakdown.ataque=2;
-  else breakdown.ataque=0;
+  const atkRatio=avgGoals>=2.5?1.0:avgGoals>=2.0?0.80:avgGoals>=1.5?0.53:avgGoals>=1.0?0.27:avgGoals>0?0.13:0;
+  breakdown.ataque=Math.round(W.ataque*atkRatio);
 
-  // === CONTEXTO CASA/FORA + TENDÊNCIA (10%) ===
-  let ctx=5; // base neutra
-  // Bônus por dados de casa/fora disponíveis
-  if(home.contextJogos>=3&&away.contextJogos>=3) ctx+=2;
-  // Tendência de ataque crescente
-  if(home.trendUp||away.trendUp) ctx+=2;
-  // Penalidade por tendência decrescente em ambos
-  if(home.trendDown&&away.trendDown) ctx-=3;
-  breakdown.contexto=Math.max(0,Math.min(ctx,10));
+  // === CONTEXTO CASA/FORA + TENDÊNCIA ===
+  let ctxRat=0.50; // base neutra
+  if(home.contextJogos>=3&&away.contextJogos>=3)ctxRat+=0.20;
+  if(home.trendUp||away.trendUp)ctxRat+=0.20;
+  if(home.trendDown&&away.trendDown)ctxRat-=0.30;
+  breakdown.contexto=Math.max(0,Math.round(W.contexto*Math.min(ctxRat,1.0)));
 
-  // === FORMA (5%) — peso reduzido pela baixa correlação ===
+  // === FORMA ===
   const formScore=(countWins(home.form)+countWins(away.form))/2;
-  if(formScore>=0.6)breakdown.forma=5;
-  else if(formScore>=0.4)breakdown.forma=3;
-  else breakdown.forma=1;
+  const formaRatio=formScore>=0.6?1.0:formScore>=0.4?0.60:0.20;
+  breakdown.forma=Math.round(W.forma*formaRatio);
 
   const score=Math.min(Math.round(Object.values(breakdown).reduce((a,b)=>a+b,0)),100);
-  return{score,breakdown};
+  return{score,breakdown,pesos:W};
 }
 
 function countWins(form){if(!form||!form.length)return 0.5;return(form.match(/W/g)||[]).length/form.length}
@@ -1157,6 +1258,8 @@ async function buscarResultados(){
 async function buscarResultadosPendentes(){
   if(!state.apiFootball)return;
   const agora=new Date();
+  // Buscar resultados de TODOS os jogos pendentes — recomendados e não recomendados
+  // Todos contribuem para o aprendizado do modelo
   const pendentes=state.jogosHistorico.filter(j=>{
     if(j.resultado!==null)return false;
     return(agora-new Date(j.time))>2*60*60*1000;
@@ -1183,6 +1286,8 @@ async function buscarResultadosPendentes(){
           const totalGols=(fixture.goals.home||0)+(fixture.goals.away||0);
           jogo.golsMarcados=totalGols;
           jogo.resultado=totalGols>1.5?'over':'under';
+          // APRENDER com o resultado
+          aprenderComResultado(jogo);
           atualizados++;
         }
       });
@@ -1248,7 +1353,122 @@ function renderResultados(){
   el.innerHTML=html;
 }
 
-// ===================== RENDER CALIBRACAO =====================
+// ===================== RENDER MODELO IA =====================
+function renderModelo(){
+  const el=document.getElementById('modeloContent');
+  const p=state.pesosAdaptativos;
+  const comResultado=state.jogosHistorico.filter(j=>j.resultado!==null&&j.fatores);
+  const total=comResultado.length;
+  const totalRec=comResultado.filter(j=>j.recomendado).length;
+  const totalNaoRec=total-totalRec;
+  const confianca=p.confianca||0;
+  const ajustes=p.ajustes||0;
+
+  if(total<5){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">🧠</div><div class="empty-text">O modelo precisa de pelo menos 5 resultados para começar a aprender.<br><br>Atualmente: ${total} resultado(s).</div></div>`;
+    return;
+  }
+
+  const pesosBase={defesa:30,liga:20,h2h:20,ataque:15,contexto:10,forma:5};
+  const pesosAtivos=getPesosAtivos();
+  const c=p.correlacoes;
+
+  const corLabel=v=>v>=0.3?'↑↑ Muito preditivo':v>=0.1?'↑ Preditivo':v>=-0.1?'→ Neutro':v>=-0.3?'↓ Fraco':'↓↓ Contraditório';
+  const corColor=v=>v>=0.1?'var(--success)':v>=-0.1?'var(--muted)':'var(--danger)';
+
+  let html=`
+  <!-- STATUS DO MODELO -->
+  <div style="background:linear-gradient(135deg,#0d2137,var(--bg));border:1px solid var(--accent);border-radius:16px;padding:16px;margin-bottom:14px;position:relative;overflow:hidden">
+    <div style="position:absolute;top:-20px;right:-20px;width:80px;height:80px;background:radial-gradient(circle,rgba(0,229,160,.12),transparent 70%)"></div>
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Modelo Adaptativo</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:32px;color:${confianca>=80?'var(--accent)':confianca>=40?'var(--warning)':'var(--muted)'}">
+      ${confianca}% <span style="font-size:14px;color:var(--muted)">confiança</span>
+    </div>
+    <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin:8px 0">
+      <div style="height:100%;width:${confianca}%;background:linear-gradient(90deg,var(--accent),#00ff88);border-radius:3px;transition:width 1s"></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:8px">
+      <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Total jogos</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text)">${total}</div></div>
+      <div><div style="font-size:9px;color:var(--accent);text-transform:uppercase">Recomendados</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent)">${totalRec}</div></div>
+      <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Não recomend.</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--muted)">${totalNaoRec}</div></div>
+      <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Ajustes</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text)">${ajustes}</div></div>
+    </div>
+  </div>
+
+  <!-- PESOS ADAPTATIVOS VS BASE -->
+  <div class="section-title">Pesos Aprendidos vs Base</div>
+  ${Object.keys(pesosBase).map(k=>{
+    const base=pesosBase[k];
+    const atual=pesosAtivos[k];
+    const diff=atual-base;
+    const diffStr=diff===0?'=':`${diff>0?'+':''}${diff}`;
+    const diffColor=diff>0?'var(--success)':diff<0?'var(--danger)':'var(--muted)';
+    const emojis={defesa:'🛡',liga:'🏆',h2h:'⚔',ataque:'⚽',contexto:'🏠',forma:'📈'};
+    const nomes={defesa:'Defesa',liga:'Liga',h2h:'H2H',ataque:'Ataque',contexto:'Casa/Fora',forma:'Forma'};
+    const corr=c[k]||0;
+    return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:16px">${emojis[k]}</span>
+          <div>
+            <div style="font-size:12px;font-weight:600">${nomes[k]}</div>
+            <div style="font-size:10px;color:${corColor(corr)}">${corLabel(corr)}</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--accent)">${atual}%</div>
+          <div style="font-size:10px;color:${diffColor};font-weight:700">${diffStr} vs base ${base}%</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <div style="font-size:9px;color:var(--muted);width:36px">Base</div>
+        <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${base}%;background:var(--muted);border-radius:2px"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+        <div style="font-size:9px;color:var(--accent);width:36px">Atual</div>
+        <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${atual}%;background:var(--accent);border-radius:2px"></div>
+        </div>
+      </div>
+      <div style="margin-top:6px;font-size:10px;color:var(--muted)">
+        Correlação acumulada: <span style="color:${corColor(corr)};font-weight:700">${(corr*100).toFixed(0)}%</span>
+        ${Math.abs(corr)>0.2?` — <span style="color:${corColor(corr)}">${corr>0?'Aumentando peso':'Reduzindo peso'}</span>`:''}
+      </div>
+    </div>`;
+  }).join('')}
+
+  <!-- BOTÃO FORÇAR REPROCESSAMENTO -->
+  <button class="update-btn" onclick="forcarReprocessamento()" style="margin-top:4px">
+    🔄 Reprocessar com todos os dados
+  </button>
+
+  <!-- HISTÓRICO DE EVOLUÇÃO -->
+  ${p.historico.length>0?`
+  <div class="section-title">Histórico de Evolução</div>
+  ${p.historico.slice(0,5).map(h=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:11px;font-weight:600">Ajuste #${h.ajuste} — ${h.data}</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${Object.entries(h.pesos||{}).map(([k,v])=>`
+          <div style="background:var(--surface2);border-radius:6px;padding:2px 7px;font-size:10px">
+            ${k}: <span style="color:var(--accent);font-weight:700">${v}%</span>
+          </div>`).join('')}
+      </div>
+    </div>`).join('')}
+  `:''}`;
+
+  el.innerHTML=html;
+}
+
+function forcarReprocessamento(){
+  reprocessarAprendizado();
+  renderModelo();
+  showToast('🧠 Modelo reprocessado com todos os dados!');
+}
 function renderCalibracao(){
   const el=document.getElementById('calibracaoContent');
   const comResultado=state.jogosHistorico.filter(j=>j.resultado!==null&&j.recomendado);
@@ -1545,6 +1765,7 @@ function showPage(name,btn){
   if(name==='auditoria')renderAuditoria();
   if(name==='resultados')renderResultados();
   if(name==='calibracao')renderCalibracao();
+  if(name==='modelo')renderModelo();
   if(name==='config')updateCounters();
 }
 
