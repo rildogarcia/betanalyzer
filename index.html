@@ -677,9 +677,15 @@ function salvarNoHistorico(analysis){
 async function analyzeFixture(fix){
   try{
     const homeId=fix.teams.home.id,awayId=fix.teams.away.id,leagueId=fix.league.id;
+    const league=LEAGUES.find(l=>l.id===leagueId)||{name:fix.league.name,flag:'⚽',avgGoals:2.5,overRate:0.70};
+
+    // Copa do Mundo e grandes torneios internacionais = campo neutro
+    // Não diferenciar stats casa/fora para seleções
+    const isNeutral=league.worldCup||leagueId===1||fix.fixture.venue?.city==='neutral';
+
     const [homeStats,awayStats]=await Promise.all([
-      fetchTeamStatsCached(homeId, true),  // mandante
-      fetchTeamStatsCached(awayId, false), // visitante
+      fetchTeamStatsCached(homeId, true, isNeutral),
+      fetchTeamStatsCached(awayId, false, isNeutral),
     ]);
     const h2hKey=`h2h_${Math.min(homeId,awayId)}_${Math.max(homeId,awayId)}`;
     let h2hData;
@@ -691,7 +697,6 @@ async function analyzeFixture(fix){
       state.reqUsed++;
     }
     const {score,breakdown}=calculateScore(homeStats,awayStats,h2hData,leagueId);
-    const league=LEAGUES.find(l=>l.id===leagueId)||{name:fix.league.name,flag:'⚽',avgGoals:2.5,overRate:0.70};
     return{
       fixtureId:fix.fixture.id,homeTeam:fix.teams.home.name,awayTeam:fix.teams.away.name,
       time:fix.fixture.date,league,score,scoreBreakdown:breakdown,
@@ -699,6 +704,7 @@ async function analyzeFixture(fix){
       h2hGols:h2hData.avgGoals,h2hJogos:h2hData.total,
       h2hOver15Rate:h2hData.over15Rate,h2hOver15Total:h2hData.over15Total,
       h2hSameVenueRate:h2hData.sameVenueOver15Rate,
+      isNeutral,
       fromCache:homeStats.fromCache&&awayStats.fromCache,
     };
   }catch(e){return null}
@@ -706,10 +712,11 @@ async function analyzeFixture(fix){
 
 function isCacheValid(ts){return ts&&(Date.now()-ts)<24*60*60*1000}
 
-async function fetchTeamStatsCached(teamId, isHomeTeam){
-  const key=`stats_${teamId}_${isHomeTeam?'h':'a'}`;
+async function fetchTeamStatsCached(teamId, isHomeTeam, isNeutral){
+  // Para Copa do Mundo (campo neutro), não diferenciar casa/fora no cache
+  const key=isNeutral?`stats_${teamId}_n`:`stats_${teamId}_${isHomeTeam?'h':'a'}`;
   if(statsCache[key]&&isCacheValid(statsCache[key].ts))return{...statsCache[key].data,fromCache:true};
-  const stats=await fetchTeamStats(teamId, isHomeTeam);
+  const stats=await fetchTeamStats(teamId, isNeutral?null:isHomeTeam);
   statsCache[key]={data:stats,ts:Date.now()};
   state.reqUsed++;
   document.getElementById('reqCount').textContent=state.reqUsed+' / 7500';
@@ -722,6 +729,65 @@ async function fetchTeamStats(teamId, isHomeTeam){
     const data=await resp.json();
     const fixtures=data.response||[];
     if(!fixtures.length)return defaultStats();
+
+    const mediana=(arr)=>{
+      if(!arr.length)return 0;
+      const s=[...arr].sort((a,b)=>a-b);
+      const m=Math.floor(s.length/2);
+      return s.length%2!==0?s[m]:(s[m-1]+s[m])/2;
+    };
+
+    // Para campo neutro (isHomeTeam === null), usar todos os jogos sem distinção
+    const isNeutral=isHomeTeam===null;
+    const homeFixtures=isNeutral?fixtures:fixtures.filter(f=>String(f.teams.home.id)===String(teamId));
+    const awayFixtures=isNeutral?fixtures:fixtures.filter(f=>String(f.teams.away.id)===String(teamId));
+
+    const goalsForArr=[],goalsAgainstArr=[];
+    let wins=0,form='';
+    fixtures.forEach(f=>{
+      const isHome=String(f.teams.home.id)===String(teamId);
+      const gf=isHome?(f.goals.home??0):(f.goals.away??0);
+      const ga=isHome?(f.goals.away??0):(f.goals.home??0);
+      goalsForArr.push(gf);
+      goalsAgainstArr.push(ga);
+      const won=isHome?(f.teams.home.winner===true):(f.teams.away.winner===true);
+      const draw=f.teams.home.winner===null&&f.teams.away.winner===null;
+      wins+=won?1:0;
+      form+=won?'W':draw?'D':'L';
+    });
+
+    // Stats contextuais — para campo neutro usa todos os jogos
+    const contextFixtures=isNeutral?fixtures:(isHomeTeam?homeFixtures:awayFixtures);
+    const contextGF=[],contextGA=[];
+    contextFixtures.forEach(f=>{
+      const isHome=String(f.teams.home.id)===String(teamId);
+      contextGF.push(isHome?(f.goals.home??0):(f.goals.away??0));
+      contextGA.push(isHome?(f.goals.away??0):(f.goals.home??0));
+    });
+
+    // Tendência: últimos 5 vs últimos 10
+    const last5=goalsForArr.slice(0,5);
+    const trend5=last5.length?last5.reduce((a,b)=>a+b,0)/last5.length:0;
+    const trend10=goalsForArr.length?goalsForArr.reduce((a,b)=>a+b,0)/goalsForArr.length:0;
+    const trendUp=trend5>trend10+0.3;
+    const trendDown=trend5<trend10-0.3;
+
+    const n=fixtures.length;
+    return{
+      goalsFor:parseFloat(mediana(goalsForArr).toFixed(2)),
+      goalsAgainst:parseFloat(mediana(goalsAgainstArr).toFixed(2)),
+      goalsForMean:parseFloat((goalsForArr.reduce((a,b)=>a+b,0)/n).toFixed(2)),
+      goalsAgainstMean:parseFloat((goalsAgainstArr.reduce((a,b)=>a+b,0)/n).toFixed(2)),
+      contextGoalsFor:contextGF.length>=2?parseFloat(mediana(contextGF).toFixed(2)):null,
+      contextGoalsAgainst:contextGA.length>=2?parseFloat(mediana(contextGA).toFixed(2)):null,
+      contextJogos:contextFixtures.length,
+      trendUp,trendDown,trend5:parseFloat(trend5.toFixed(2)),trend10:parseFloat(trend10.toFixed(2)),
+      goalsForArr,goalsAgainstArr,
+      played:n,wins,form,winRate:wins/n,
+      isNeutral,
+    };
+  }catch(e){return defaultStats()}
+}
 
     const mediana=(arr)=>{
       if(!arr.length)return 0;
@@ -766,24 +832,7 @@ async function fetchTeamStats(teamId, isHomeTeam){
     const trendUp=trend5>trend10+0.3; // melhorando no ataque
     const trendDown=trend5<trend10-0.3; // piorando no ataque
 
-    const n=fixtures.length;
-    return{
-      goalsFor:parseFloat(mediana(goalsForArr).toFixed(2)),
-      goalsAgainst:parseFloat(mediana(goalsAgainstArr).toFixed(2)),
-      goalsForMean:parseFloat((goalsForArr.reduce((a,b)=>a+b,0)/n).toFixed(2)),
-      goalsAgainstMean:parseFloat((goalsAgainstArr.reduce((a,b)=>a+b,0)/n).toFixed(2)),
-      // Casa/fora específico
-      contextGoalsFor:contextGF.length?parseFloat(mediana(contextGF).toFixed(2)):null,
-      contextGoalsAgainst:contextGA.length?parseFloat(mediana(contextGA).toFixed(2)):null,
-      contextJogos:contextFixtures.length,
-      // Tendência
-      trendUp,trendDown,trend5:parseFloat(trend5.toFixed(2)),trend10:parseFloat(trend10.toFixed(2)),
-      goalsForArr,goalsAgainstArr,
-      played:n,wins,form,winRate:wins/n,
-    };
-  }catch(e){return defaultStats()}
-}
-function defaultStats(){return{goalsFor:0,goalsAgainst:0,goalsForMean:0,goalsAgainstMean:0,contextGoalsFor:null,contextGoalsAgainst:null,contextJogos:0,trendUp:false,trendDown:false,trend5:0,trend10:0,goalsForArr:[],goalsAgainstArr:[],played:0,wins:0,form:'',winRate:0}}
+function defaultStats(){return{goalsFor:0,goalsAgainst:0,goalsForMean:0,goalsAgainstMean:0,contextGoalsFor:null,contextGoalsAgainst:null,contextJogos:0,trendUp:false,trendDown:false,trend5:0,trend10:0,goalsForArr:[],goalsAgainstArr:[],played:0,wins:0,form:'',winRate:0,isNeutral:false}}
 
 async function fetchH2H(h1,h2){
   try{
